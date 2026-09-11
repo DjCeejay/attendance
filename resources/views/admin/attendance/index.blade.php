@@ -9,7 +9,7 @@
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
             <h1 class="text-2xl font-extrabold text-slate-900">Attendance Overview</h1>
-            <p class="text-xs text-slate-500">Monitor daily office attendance, network verification, and staff check-ins</p>
+            <p class="text-xs text-slate-500">Monitor daily office attendance, pending staff approvals, and device passkeys</p>
         </div>
 
         <div class="flex items-center gap-3">
@@ -25,6 +25,84 @@
             </form>
         </div>
     </div>
+
+    <!-- Pending Staff Account Approvals Queue -->
+    @if(isset($pendingUsers) && $pendingUsers->isNotEmpty())
+    <div class="bg-amber-50 border-2 border-amber-300 p-5 rounded-2xl shadow-md space-y-3">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <span class="w-3 h-3 rounded-full bg-amber-500 animate-ping"></span>
+                <h3 class="font-extrabold text-sm text-amber-900">Pending Staff Account Approvals ({{ $pendingUsers->count() }})</h3>
+            </div>
+            <span class="text-xs font-bold text-amber-800">Requires Admin Approval</span>
+        </div>
+
+        <div class="divide-y divide-amber-200 bg-white rounded-xl border border-amber-200 overflow-hidden">
+            @foreach($pendingUsers as $pu)
+                <div class="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-amber-50/50">
+                    <div>
+                        <div class="font-extrabold text-sm text-slate-900">{{ $pu->name }}</div>
+                        <div class="text-xs text-slate-500">{{ $pu->email }} &bull; Registered: {{ $pu->created_at->diffForHumans() }}</div>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <form method="POST" action="{{ route('admin.attendance.users.approve', $pu) }}">
+                            @csrf
+                            <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-1.5 px-3 rounded-lg shadow transition">
+                                Approve Account
+                            </button>
+                        </form>
+                        <form method="POST" action="{{ route('admin.attendance.users.reject', $pu) }}" onsubmit="return confirm('Reject this account application?');">
+                            @csrf
+                            <button type="submit" class="bg-slate-200 hover:bg-rose-100 text-rose-700 font-extrabold text-xs py-1.5 px-3 rounded-lg transition">
+                                Reject
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            @endforeach
+        </div>
+    </div>
+    @endif
+
+    <!-- Pending Device Passkey Approvals Queue -->
+    @if(isset($pendingCredentials) && $pendingCredentials->isNotEmpty())
+    <div class="bg-sky-50 border-2 border-sky-300 p-5 rounded-2xl shadow-md space-y-3">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <span class="w-3 h-3 rounded-full bg-sky-500 animate-ping"></span>
+                <h3 class="font-extrabold text-sm text-sky-900">Pending Device Passkey Registrations ({{ $pendingCredentials->count() }})</h3>
+            </div>
+            <span class="text-xs font-bold text-sky-800">Requires Admin Approval</span>
+        </div>
+
+        <div class="divide-y divide-sky-200 bg-white rounded-xl border border-sky-200 overflow-hidden">
+            @foreach($pendingCredentials as $pc)
+                <div class="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-sky-50/50">
+                    <div>
+                        <div class="font-extrabold text-sm text-slate-900">{{ $pc->user->name }}</div>
+                        <div class="text-xs text-slate-500">Device: <strong>{{ $pc->device_name ?: 'WebAuthn Device' }}</strong> &bull; Submitted: {{ $pc->registered_at ? $pc->registered_at->diffForHumans() : 'Recently' }}</div>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <form method="POST" action="{{ route('admin.attendance.credentials.approve', $pc) }}">
+                            @csrf
+                            <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-1.5 px-3 rounded-lg shadow transition">
+                                Approve Device
+                            </button>
+                        </form>
+                        <form method="POST" action="{{ route('admin.attendance.credentials.reject', $pc) }}" onsubmit="return confirm('Reject this device registration?');">
+                            @csrf
+                            <button type="submit" class="bg-slate-200 hover:bg-rose-100 text-rose-700 font-extrabold text-xs py-1.5 px-3 rounded-lg transition">
+                                Reject Device
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            @endforeach
+        </div>
+    </div>
+    @endif
 
     <!-- Overview Metric Cards -->
     <div class="grid grid-cols-2 md:grid-cols-5 gap-4">

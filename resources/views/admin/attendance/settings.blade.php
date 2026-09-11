@@ -1,6 +1,6 @@
 @extends('layouts.admin')
 
-@section('title', 'Attendance Rules & Settings - ARTSCI Admin')
+@section('title', 'Attendance Rules & Settings - Admin Console')
 
 @section('content')
 <div class="space-y-6 max-w-3xl">

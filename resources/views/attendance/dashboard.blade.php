@@ -34,15 +34,34 @@
         </div>
 
         <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex items-center gap-2.5">
-            <div class="w-2.5 h-2.5 rounded-full {{ $hasRegisteredDevice ? 'bg-indigo-600' : 'bg-rose-500' }}"></div>
+            <div class="w-2.5 h-2.5 rounded-full {{ $activeCredential && $activeCredential->isApproved() ? 'bg-emerald-500' : ($activeCredential && $activeCredential->isPending() ? 'bg-amber-500 animate-pulse' : 'bg-rose-500') }}"></div>
             <div>
                 <div class="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">Passkey Device</div>
                 <div class="text-xs font-bold text-slate-800">
-                    {{ $hasRegisteredDevice ? 'Device Registered' : 'Not Registered' }}
+                    @if($activeCredential && $activeCredential->isApproved())
+                        Device Approved
+                    @elseif($activeCredential && $activeCredential->isPending())
+                        Pending Admin Approval
+                    @else
+                        Not Registered
+                    @endif
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- Device Pending Admin Approval Notice -->
+    @if($activeCredential && $activeCredential->isPending())
+    <div class="bg-amber-50 border border-amber-300 p-4 rounded-2xl shadow-sm text-amber-900 flex items-start gap-3">
+        <svg class="w-6 h-6 text-amber-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <div>
+            <h4 class="font-extrabold text-sm text-amber-950">Device Registration Submitted</h4>
+            <p class="text-xs mt-1 text-amber-800 leading-relaxed">
+                Your device passkey has been registered and is currently awaiting administrator approval. You will be able to check in as soon as an admin approves your device.
+            </p>
+        </div>
+    </div>
+    @endif
 
     <!-- WebAuthn Browser Support Check Banner (If Unsupported) -->
     <div id="unsupported-device-banner" class="hidden bg-rose-50 border border-rose-200 p-4 rounded-2xl shadow-sm text-rose-900">
@@ -66,7 +85,7 @@
         <div>
             <h3 class="font-extrabold text-lg text-slate-900">Register This Device</h3>
             <p class="text-xs text-slate-600 mt-1 leading-relaxed">
-                This device will be used to verify your identity when checking in or out from the office network.
+                This device will be registered for identity verification. Registrations are submitted to administrators for approval.
             </p>
         </div>
 
@@ -130,17 +149,21 @@
         <div id="attendance-alert" class="hidden mb-4 p-3.5 rounded-xl text-xs font-bold"></div>
 
         <!-- Touch Primary Actions -->
+        @php
+            $canAct = $activeCredential && $activeCredential->isApproved();
+        @endphp
+
         @if(!$record || !$record->check_in_at)
             <button type="button" id="btn-check-in" onclick="performAttendanceAction('check-in')"
                 class="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-base py-4 px-6 rounded-2xl shadow-lg transition btn-touch flex items-center justify-center gap-3 disabled:opacity-50"
-                {{ !$hasRegisteredDevice ? 'disabled' : '' }}>
+                {{ !$canAct ? 'disabled' : '' }}>
                 <svg class="w-6 h-6 text-emerald-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>
                 <span>Check In</span>
             </button>
         @elseif($record && $record->check_in_at && !$record->check_out_at)
             <button type="button" id="btn-check-out" onclick="performAttendanceAction('check-out')"
                 class="w-full bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-extrabold text-base py-4 px-6 rounded-2xl shadow-lg transition btn-touch flex items-center justify-center gap-3 disabled:opacity-50"
-                {{ !$hasRegisteredDevice ? 'disabled' : '' }}>
+                {{ !$canAct ? 'disabled' : '' }}>
                 <svg class="w-6 h-6 text-indigo-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
                 <span>Check Out</span>
             </button>

@@ -20,7 +20,7 @@ class WebAuthnService
         return [
             'challenge' => self::base64UrlEncode($challenge),
             'rp' => [
-                'name' => 'ARTSCI Attendance',
+                'name' => 'Staff Attendance',
                 'id' => request()->getHost(),
             ],
             'user' => [
@@ -40,11 +40,11 @@ class WebAuthnService
     }
 
     /**
-     * Register a new WebAuthn credential for the authenticated user.
+     * Register a new WebAuthn credential for the authenticated user (Set to pending admin approval).
      */
     public function registerCredential(User $user, array $payload): AttendanceCredential
     {
-        // Policy: 1 active device per user. Check if active device exists.
+        // Policy: Check if active device exists.
         if ($user->hasActiveAttendanceCredential()) {
             throw new \InvalidArgumentException('You already have an active registered device for attendance. Replacing a device requires administrator authorization.');
         }
@@ -56,7 +56,6 @@ class WebAuthnService
         if ($storedChallenge && is_array($clientData)) {
             $receivedChallenge = isset($clientData['challenge']) ? self::base64UrlDecode($clientData['challenge']) : '';
             if ($receivedChallenge !== '' && $receivedChallenge !== $storedChallenge) {
-                // If challenges were explicitly decoded and mismatch
                 throw new \InvalidArgumentException('Invalid cryptographic challenge.');
             }
         }
@@ -69,7 +68,6 @@ class WebAuthnService
             throw new \InvalidArgumentException('Credential ID is required.');
         }
 
-        // Check if credential ID is already registered to another user
         if (AttendanceCredential::where('credential_id', $credentialId)->exists()) {
             throw new \InvalidArgumentException('This credential is already registered to another account.');
         }
@@ -83,8 +81,9 @@ class WebAuthnService
             'device_name' => mb_substr($deviceName, 0, 255),
             'user_agent' => mb_substr(request()->header('User-Agent', ''), 0, 500),
             'is_active' => true,
+            'approval_status' => 'pending', // Requires Admin approval
             'registered_at' => now(),
-            'last_used_at' => now(),
+            'last_used_at' => null,
         ]);
 
         AttendanceAuditLog::logEvent(
@@ -94,8 +93,9 @@ class WebAuthnService
             newValues: [
                 'credential_id' => $credential->id,
                 'device_name' => $credential->device_name,
+                'approval_status' => 'pending',
             ],
-            reason: 'First-time device registration for attendance'
+            reason: 'Device registration submitted (Awaiting admin approval)'
         );
 
         return $credential;
@@ -140,10 +140,16 @@ class WebAuthnService
             throw new \InvalidArgumentException('Attendance verification failed. This device is not registered for this account.');
         }
 
+        if ($activeCredential->approval_status === 'pending') {
+            throw new \InvalidArgumentException('Device registration is pending administrator approval. Please contact an administrator to approve your device passkey.');
+        }
+
+        if ($activeCredential->approval_status === 'rejected') {
+            throw new \InvalidArgumentException('Device registration was rejected by an administrator.');
+        }
+
         $submittedCredentialId = $payload['credential_id'] ?? null;
 
-        // Anti-cheating core rule:
-        // If Peter logged into John's account, Peter's device credential ID will NOT match John's active credential ID!
         if (empty($submittedCredentialId) || $submittedCredentialId !== $activeCredential->credential_id) {
             AttendanceAuditLog::logEvent(
                 eventType: 'failed_device_verification',
@@ -161,7 +167,6 @@ class WebAuthnService
         if ($storedChallenge && is_array($clientData)) {
             $receivedChallenge = isset($clientData['challenge']) ? self::base64UrlDecode($clientData['challenge']) : '';
             if ($receivedChallenge !== '' && $receivedChallenge !== $storedChallenge) {
-                // Challenge mismatch
                 throw new \InvalidArgumentException('Attendance verification failed. Invalid authentication challenge.');
             }
         }

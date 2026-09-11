@@ -160,7 +160,7 @@ class AttendanceController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Check-in failed. Request must originate from the approved ARTSCI office network.',
+                'message' => 'Check-in failed. Request must originate from an approved office network.',
             ], 403);
         }
 
@@ -272,7 +272,7 @@ class AttendanceController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Check-out failed. Request must originate from the approved ARTSCI office network.',
+                'message' => 'Check-out failed. Request must originate from an approved office network.',
             ], 403);
         }
 

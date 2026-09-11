@@ -38,6 +38,13 @@ class AdminAttendanceController extends Controller
         $users = User::orderBy('name')->get();
         $totalStaffCount = $users->count();
 
+        // Pending Approval Lists
+        $pendingUsers = User::where('status', 'pending')->orderBy('created_at', 'desc')->get();
+        $pendingCredentials = AttendanceCredential::with('user')
+            ->where('approval_status', 'pending')
+            ->orderBy('registered_at', 'desc')
+            ->get();
+
         $query = AttendanceRecord::with(['user', 'checkInCredential'])
             ->whereDate('attendance_date', $date);
 
@@ -72,8 +79,83 @@ class AdminAttendanceController extends Controller
             'lateCount',
             'checkedOutCount',
             'currentlyPresentCount',
-            'notCheckedInCount'
+            'notCheckedInCount',
+            'pendingUsers',
+            'pendingCredentials'
         ));
+    }
+
+    public function approveUser(User $user)
+    {
+        $this->authorizeAdmin();
+
+        $user->update(['status' => 'approved']);
+
+        AttendanceAuditLog::logEvent(
+            eventType: 'user_account_approval',
+            actor: Auth::user(),
+            affectedUser: $user,
+            reason: 'Approved pending staff account'
+        );
+
+        return back()->with('success', "Staff account for {$user->name} has been approved.");
+    }
+
+    public function rejectUser(User $user)
+    {
+        $this->authorizeAdmin();
+
+        $userName = $user->name;
+        $user->update(['status' => 'rejected']);
+
+        AttendanceAuditLog::logEvent(
+            eventType: 'user_account_rejection',
+            actor: Auth::user(),
+            affectedUser: $user,
+            reason: 'Rejected pending staff account'
+        );
+
+        return back()->with('success', "Staff account for {$userName} was rejected.");
+    }
+
+    public function approveCredential(AttendanceCredential $credential)
+    {
+        $this->authorizeAdmin();
+
+        $credential->update([
+            'approval_status' => 'approved',
+            'is_active' => true,
+        ]);
+
+        AttendanceAuditLog::logEvent(
+            eventType: 'device_approval',
+            actor: Auth::user(),
+            affectedUser: $credential->user,
+            newValues: ['credential_id' => $credential->id, 'approval_status' => 'approved'],
+            reason: 'Approved passkey device registration'
+        );
+
+        return back()->with('success', "Passkey device for {$credential->user->name} has been approved for attendance check-in.");
+    }
+
+    public function rejectCredential(AttendanceCredential $credential)
+    {
+        $this->authorizeAdmin();
+
+        $credential->update([
+            'approval_status' => 'rejected',
+            'is_active' => false,
+        ]);
+
+        AttendanceAuditLog::logEvent(
+            eventType: 'device_rejection',
+            actor: Auth::user(),
+            affectedUser: $credential->user,
+            newValues: ['credential_id' => $credential->id, 'approval_status' => 'rejected'],
+            reason: 'Rejected passkey device registration'
+        );
+
+        return back()->with('success', "Device registration for {$credential->user->name} was rejected.");
     }
 
     public function analytics(Request $request)
@@ -173,7 +255,6 @@ class AdminAttendanceController extends Controller
             ->limit(30)
             ->get();
 
-        // Calculate detailed late statistics for this specific user
         $allUserRecords = AttendanceRecord::where('user_id', $user->id)->get();
 
         $startOfWeek = Carbon::now()->startOfWeek();

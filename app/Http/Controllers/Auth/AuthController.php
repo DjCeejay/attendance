@@ -34,7 +34,7 @@ class AuthController extends Controller
 
             if ($user->isPending()) {
                 Auth::logout();
-                return back()->withErrors(['email' => 'Your account is pending approval by an administrator.']);
+                return back()->withErrors(['email' => 'Your staff account is pending administrator approval. Please wait for an admin to approve your account.']);
             }
 
             return redirect()->intended(route('attendance.dashboard'));
@@ -43,6 +43,34 @@ class AuthController extends Controller
         return back()->withErrors([
             'email' => 'The provided credentials do not match our records.',
         ])->onlyInput('email');
+    }
+
+    public function showRegisterForm()
+    {
+        if (Auth::check()) {
+            return redirect()->route('attendance.dashboard');
+        }
+
+        return view('auth.register');
+    }
+
+    public function register(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $user = User::create([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => Hash::make($validated['password']),
+            'role' => 'user',
+            'status' => 'pending', // Requires Admin Approval
+        ]);
+
+        return redirect()->route('login')->with('success', 'Registration submitted successfully! Your account is pending administrator approval before you can sign in.');
     }
 
     public function logout(Request $request)

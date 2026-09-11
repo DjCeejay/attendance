@@ -5,9 +5,11 @@ use App\Http\Controllers\Attendance\AttendanceController;
 use App\Http\Controllers\Auth\AuthController;
 use Illuminate\Support\Facades\Route;
 
-// Authentication Routes
+// Authentication & Self-Registration Routes
 Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
 Route::post('/login', [AuthController::class, 'login']);
+Route::get('/register', [AuthController::class, 'showRegisterForm'])->name('register');
+Route::post('/register', [AuthController::class, 'register']);
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
 // Authenticated Staff Routes
@@ -28,6 +30,14 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/', [AdminAttendance::class, 'index'])->name('index');
         Route::get('/analytics', [AdminAttendance::class, 'analytics'])->name('analytics');
         Route::get('/user/{user}', [AdminAttendance::class, 'showUserHistory'])->name('user-history');
+
+        // Account & Device Approvals
+        Route::post('/users/{user}/approve', [AdminAttendance::class, 'approveUser'])->name('users.approve');
+        Route::post('/users/{user}/reject', [AdminAttendance::class, 'rejectUser'])->name('users.reject');
+        Route::post('/credentials/{credential}/approve', [AdminAttendance::class, 'approveCredential'])->name('credentials.approve');
+        Route::post('/credentials/{credential}/reject', [AdminAttendance::class, 'rejectCredential'])->name('credentials.reject');
+
+        // Record Corrections
         Route::post('/correct/{record}', [AdminAttendance::class, 'correctRecord'])->name('correct');
         Route::post('/manual-record', [AdminAttendance::class, 'storeManualRecord'])->name('manual-record');
         Route::post('/deactivate-credential/{credential}', [AdminAttendance::class, 'deactivateCredential'])->name('deactivate-credential');

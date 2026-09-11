@@ -1,6 +1,6 @@
 @extends('layouts.admin')
 
-@section('title', 'Office Network Configuration - ARTSCI Admin')
+@section('title', 'Office Network Configuration - Admin Console')
 
 @section('content')
 <div class="space-y-6">
@@ -85,7 +85,7 @@
             @csrf
             <div>
                 <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Network Label / Name</label>
-                <input type="text" name="name" required placeholder="e.g. ARTSCI Main HQ Wi-Fi" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-bold">
+                <input type="text" name="name" required placeholder="e.g. HQ Main Office Wi-Fi" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-bold">
             </div>
 
             <div>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'artsci-attendance-v1';
+const CACHE_NAME = 'staff-attendance-v2';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

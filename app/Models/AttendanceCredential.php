@@ -18,6 +18,7 @@ class AttendanceCredential extends Model
         'device_name',
         'user_agent',
         'is_active',
+        'approval_status',
         'registered_at',
         'last_used_at',
         'deactivated_at',
@@ -42,5 +43,15 @@ class AttendanceCredential extends Model
     public function deactivatedBy()
     {
         return $this->belongsTo(User::class, 'deactivated_by');
+    }
+
+    public function isApproved(): bool
+    {
+        return $this->approval_status === 'approved';
+    }
+
+    public function isPending(): bool
+    {
+        return $this->approval_status === 'pending';
     }
 }
