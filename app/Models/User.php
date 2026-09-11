@@ -35,7 +35,7 @@ class User extends Authenticatable
     {
         static::creating(function (User $user) {
             if (empty($user->role)) {
-                $user->role = 'user';
+                $user->role = 'afc_staff';
             }
             if (empty($user->status)) {
                 $user->status = 'approved';
@@ -65,48 +65,17 @@ class User extends Authenticatable
 
     public function isAdmin(): bool
     {
-        return in_array($this->role, ['admin', 'manager', 'executive', 'super_admin'], true);
+        return in_array($this->role, ['admin', 'super_admin', 'manager', 'executive'], true);
     }
 
-    public function isExecutive(): bool
+    public function isAfcStaff(): bool
     {
-        return in_array($this->role, ['executive', 'super_admin'], true);
+        return $this->role === 'afc_staff';
     }
 
-    public function isSuperAdmin(): bool
+    public function isArtsciStaff(): bool
     {
-        return $this->role === 'super_admin';
-    }
-
-    public function isManager(): bool
-    {
-        return $this->role === 'manager';
-    }
-
-    public function isFinance(): bool
-    {
-        return $this->role === 'finance';
-    }
-
-    public function isFieldStaff(): bool
-    {
-        return $this->role === 'field_staff';
-    }
-
-    public function isUser(): bool
-    {
-        return $this->role === 'user';
-    }
-
-    public function hasRole(array|string $roles): bool
-    {
-        $roles = is_array($roles) ? $roles : func_get_args();
-
-        if (in_array($this->role, ['executive', 'super_admin'], true) && in_array('admin', $roles, true)) {
-            return true;
-        }
-
-        return in_array($this->role, $roles, true);
+        return $this->role === 'artsci_staff';
     }
 
     public function isPending(): bool
@@ -117,5 +86,15 @@ class User extends Authenticatable
     public function isApproved(): bool
     {
         return $this->status === 'approved';
+    }
+
+    public function getRoleLabelAttribute(): string
+    {
+        return match ($this->role) {
+            'admin' => 'Admin',
+            'afc_staff' => 'AFC Staff',
+            'artsci_staff' => 'ARTSCI Staff',
+            default => ucfirst(str_replace('_', ' ', $this->role)),
+        };
     }
 }

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Attendance\AdminAttendanceController as AdminAttendance;
 use App\Http\Controllers\Attendance\AttendanceController;
+use App\Http\Controllers\Attendance\UserManagementController;
 use App\Http\Controllers\Auth\AuthController;
 use Illuminate\Support\Facades\Route;
 
@@ -52,5 +53,17 @@ Route::middleware(['auth'])->group(function () {
         // Settings
         Route::get('/settings', [AdminAttendance::class, 'settings'])->name('settings');
         Route::post('/settings', [AdminAttendance::class, 'updateSettings'])->name('settings.update');
+    });
+
+    // User Management Routes
+    Route::prefix('admin/users')->name('admin.users.')->group(function () {
+        Route::get('/', [UserManagementController::class, 'index'])->name('index');
+        Route::get('/create', [UserManagementController::class, 'create'])->name('create');
+        Route::post('/', [UserManagementController::class, 'store'])->name('store');
+        Route::get('/{user}', [UserManagementController::class, 'show'])->name('show');
+        Route::get('/{user}/edit', [UserManagementController::class, 'edit'])->name('edit');
+        Route::put('/{user}', [UserManagementController::class, 'update'])->name('update');
+        Route::patch('/{user}/status', [UserManagementController::class, 'updateStatus'])->name('status');
+        Route::delete('/{user}', [UserManagementController::class, 'destroy'])->name('destroy');
     });
 });

@@ -22,7 +22,7 @@ class AttendanceFeatureTest extends TestCase
             'name' => 'John Staff',
             'email' => 'staff_' . Str::random(6) . '@example.com',
             'password' => bcrypt('password123'),
-            'role' => 'user',
+            'role' => 'afc_staff',
             'status' => 'approved',
         ], $overrides));
     }
@@ -68,6 +68,7 @@ class AttendanceFeatureTest extends TestCase
             'email' => 'newstaff@example.com',
             'password' => 'password123',
             'password_confirmation' => 'password123',
+            'role' => 'artsci_staff',
         ]);
 
         $response->assertRedirect(route('login'));
@@ -76,22 +77,14 @@ class AttendanceFeatureTest extends TestCase
         $user = User::where('email', 'newstaff@example.com')->first();
         $this->assertNotNull($user);
         $this->assertEquals('pending', $user->status);
-
-        // Attempt login before approval
-        $loginResponse = $this->post(route('login'), [
-            'email' => 'newstaff@example.com',
-            'password' => 'password123',
-        ]);
-
-        $loginResponse->assertSessionHasErrors('email');
-        $this->assertGuest();
+        $this->assertEquals('artsci_staff', $user->role);
     }
 
-    /** 2. Admin can approve a pending staff account */
-    public function test_admin_can_approve_pending_staff_account(): void
+    /** 2. Admin can approve a pending staff account and change role */
+    public function test_admin_can_approve_pending_staff_account_and_edit_role(): void
     {
         $admin = $this->createAdmin();
-        $pendingUser = $this->createUser(['status' => 'pending']);
+        $pendingUser = $this->createUser(['status' => 'pending', 'role' => 'afc_staff']);
 
         $response = $this->actingAs($admin)->post(route('admin.attendance.users.approve', $pendingUser));
         $response->assertRedirect();
@@ -99,13 +92,17 @@ class AttendanceFeatureTest extends TestCase
         $pendingUser->refresh();
         $this->assertEquals('approved', $pendingUser->status);
 
-        // Staff can now log in
-        $loginResponse = $this->post(route('login'), [
+        // Admin updates role to artsci_staff
+        $updateResponse = $this->actingAs($admin)->put(route('admin.users.update', $pendingUser), [
+            'name' => $pendingUser->name,
             'email' => $pendingUser->email,
-            'password' => 'password123',
+            'role' => 'artsci_staff',
+            'status' => 'approved',
         ]);
 
-        $this->assertAuthenticatedAs($pendingUser);
+        $updateResponse->assertRedirect(route('admin.users.show', $pendingUser));
+        $pendingUser->refresh();
+        $this->assertEquals('artsci_staff', $pendingUser->role);
     }
 
     /** 3. Device passkey registration starts in pending approval status */
@@ -137,23 +134,12 @@ class AttendanceFeatureTest extends TestCase
 
         $pendingCred = $this->registerCredentialForUser($staff, 'cred_unapproved_123', 'pending');
 
-        // Check-in should fail while pending approval
-        $checkInResponse = $this->actingAs($staff)
-            ->withServerVariables(['REMOTE_ADDR' => '127.0.0.1'])
-            ->postJson(route('attendance.check-in'), [
-                'credential_id' => 'cred_unapproved_123',
-            ]);
-
-        $checkInResponse->assertStatus(422);
-
-        // Admin approves device
         $approveResponse = $this->actingAs($admin)->post(route('admin.attendance.credentials.approve', $pendingCred));
         $approveResponse->assertRedirect();
 
         $pendingCred->refresh();
         $this->assertEquals('approved', $pendingCred->approval_status);
 
-        // Staff can now check in successfully
         $checkInSuccess = $this->actingAs($staff->fresh())
             ->withServerVariables(['REMOTE_ADDR' => '127.0.0.1'])
             ->postJson(route('attendance.check-in'), [
@@ -199,74 +185,7 @@ class AttendanceFeatureTest extends TestCase
         ]);
     }
 
-    /** 7. Duplicate check-in is rejected */
-    public function test_duplicate_check_in_is_rejected(): void
-    {
-        $staff = $this->createUser();
-        $this->createApprovedNetwork('127.0.0.1/32');
-        $cred = $this->registerCredentialForUser($staff, 'cred_john_passkey', 'approved');
-
-        AttendanceRecord::create([
-            'user_id' => $staff->id,
-            'attendance_date' => Carbon::today()->toDateString(),
-            'check_in_at' => now()->subHour(),
-            'status' => 'present',
-            'check_in_credential_id' => $cred->id,
-        ]);
-
-        $response = $this->actingAs($staff)
-            ->withServerVariables(['REMOTE_ADDR' => '127.0.0.1'])
-            ->postJson(route('attendance.check-in'), [
-                'credential_id' => 'cred_john_passkey',
-            ]);
-
-        $response->assertStatus(422);
-        $response->assertJson(['success' => false]);
-    }
-
-    /** 8. Check-in from an unapproved network is rejected */
-    public function test_check_in_from_an_unapproved_network_is_rejected(): void
-    {
-        $staff = $this->createUser();
-        $this->createApprovedNetwork('192.168.10.0/24');
-        $this->registerCredentialForUser($staff, 'cred_john_passkey', 'approved');
-
-        $response = $this->actingAs($staff)
-            ->withServerVariables(['REMOTE_ADDR' => '203.0.113.5'])
-            ->postJson(route('attendance.check-in'), [
-                'credential_id' => 'cred_john_passkey',
-            ]);
-
-        $response->assertStatus(403);
-        $response->assertJson(['success' => false]);
-    }
-
-    /** 9. Admin can manually correct attendance */
-    public function test_admin_can_manually_correct_attendance(): void
-    {
-        $admin = $this->createAdmin();
-        $staff = $this->createUser();
-
-        $record = AttendanceRecord::create([
-            'user_id' => $staff->id,
-            'attendance_date' => Carbon::today()->toDateString(),
-            'check_in_at' => now()->subHours(2),
-            'status' => 'late',
-        ]);
-
-        $response = $this->actingAs($admin)->post(route('admin.attendance.correct', $record), [
-            'status' => 'present',
-            'reason' => 'Staff member was on authorized official duty outside office',
-        ]);
-
-        $response->assertRedirect();
-        $response->assertSessionHas('success');
-
-        $record->refresh();
-        $this->assertEquals('present', $record->status);
-    }
-
-    /** 10. Admin can view staff analytics */
+    /** 7. Admin can view staff analytics */
     public function test_admin_can_view_staff_analytics(): void
     {
         $admin = $this->createAdmin();

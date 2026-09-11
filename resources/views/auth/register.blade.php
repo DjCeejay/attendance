@@ -26,6 +26,14 @@
         </div>
 
         <div>
+            <label for="role" class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Staff Organization / Role</label>
+            <select name="role" id="role" required class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm outline-none transition font-bold text-slate-800">
+                <option value="afc_staff" {{ old('role') === 'afc_staff' ? 'selected' : '' }}>AFC Staff</option>
+                <option value="artsci_staff" {{ old('role') === 'artsci_staff' ? 'selected' : '' }}>ARTSCI Staff</option>
+            </select>
+        </div>
+
+        <div>
             <label for="password" class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Password</label>
             <input type="password" name="password" id="password" required minlength="8" placeholder="At least 8 characters" class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm outline-none transition">
         </div>

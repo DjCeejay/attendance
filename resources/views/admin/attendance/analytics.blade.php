@@ -59,11 +59,9 @@
 
             <select name="role" onchange="this.form.submit()" class="px-3 py-2 border border-slate-300 rounded-lg text-xs font-bold text-slate-700">
                 <option value="">All Roles</option>
-                <option value="user" {{ $roleFilter === 'user' ? 'selected' : '' }}>User / Staff</option>
                 <option value="admin" {{ $roleFilter === 'admin' ? 'selected' : '' }}>Admin</option>
-                <option value="manager" {{ $roleFilter === 'manager' ? 'selected' : '' }}>Manager</option>
-                <option value="executive" {{ $roleFilter === 'executive' ? 'selected' : '' }}>Executive</option>
-                <option value="super_admin" {{ $roleFilter === 'super_admin' ? 'selected' : '' }}>Super Admin</option>
+                <option value="afc_staff" {{ $roleFilter === 'afc_staff' ? 'selected' : '' }}>AFC Staff</option>
+                <option value="artsci_staff" {{ $roleFilter === 'artsci_staff' ? 'selected' : '' }}>ARTSCI Staff</option>
             </select>
 
             <button type="submit" class="bg-[#0f172a] hover:bg-slate-800 text-white font-bold text-xs py-2 px-4 rounded-lg shadow">Filter Analytics</button>
