@@ -65,8 +65,8 @@
             <div class="w-3 h-3 rounded-full shrink-0 {{ $isNetworkVerified ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500' }}"></div>
             <div class="min-w-0">
                 <div class="text-[9px] uppercase tracking-widest font-extrabold text-slate-400">Network</div>
-                <div class="text-xs font-bold text-slate-800 truncate">
-                    {{ $isNetworkVerified ? 'Office IP' : 'Unverified IP' }}
+                <div class="text-xs font-bold text-slate-800 truncate" title="{{ $clientIp }}">
+                    {{ $isNetworkVerified ? 'Office IP' : 'Unverified (' . $clientIp . ')' }}
                 </div>
             </div>
         </div>

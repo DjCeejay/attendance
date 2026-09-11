@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Attendance;
 
 use App\Http\Controllers\Controller;
 use App\Models\AttendanceAuditLog;
+use App\Models\AttendanceCredential;
 use App\Models\AttendanceNetwork;
 use App\Models\AttendanceRecord;
 use App\Models\AttendanceSetting;
+use App\Models\User;
 use App\Services\WebAuthnService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -21,8 +23,27 @@ class AttendanceController extends Controller
         $this->webAuthnService = $webAuthnService;
     }
 
+    public static function resolveClientIp(Request $request): string
+    {
+        $xForwardedFor = $request->header('x-forwarded-for');
+        if (!empty($xForwardedFor)) {
+            $ips = array_map('trim', explode(',', $xForwardedFor));
+            if (!empty($ips[0]) && filter_var($ips[0], FILTER_VALIDATE_IP)) {
+                return $ips[0];
+            }
+        }
+
+        $xRealIp = $request->header('x-real-ip');
+        if (!empty($xRealIp) && filter_var(trim($xRealIp), FILTER_VALIDATE_IP)) {
+            return trim($xRealIp);
+        }
+
+        return $request->ip() ?: '127.0.0.1';
+    }
+
     public function dashboard(Request $request)
     {
+        /** @var User $user */
         $user = Auth::user();
         $today = Carbon::today();
 
@@ -33,15 +54,15 @@ class AttendanceController extends Controller
         $hasRegisteredDevice = $user->hasActiveAttendanceCredential();
         $activeCredential = $user->activeAttendanceCredential;
 
-        // Check office network
-        $clientIp = $request->ip();
+        // Check office network using proxy-aware IP resolution
+        $clientIp = self::resolveClientIp($request);
         $enabledNetworks = AttendanceNetwork::where('enabled', true)->get();
 
         $isNetworkVerified = false;
         $matchedNetwork = null;
 
         if ($enabledNetworks->isEmpty()) {
-            // Default fallback if no network explicitly defined: consider local/any active
+            // Default fallback if no network explicitly defined
             $isNetworkVerified = true;
         } else {
             foreach ($enabledNetworks as $network) {
@@ -77,25 +98,26 @@ class AttendanceController extends Controller
     public function getRegisterOptions()
     {
         $user = Auth::user();
-        return response()->json($this->webAuthnService->generateRegistrationOptions($user));
+        $options = $this->webAuthnService->generateRegistrationOptions($user);
+        return response()->json($options);
     }
 
     public function registerDevice(Request $request)
     {
         $user = Auth::user();
-        $validated = $request->validate([
+
+        $request->validate([
             'credential_id' => ['required', 'string'],
-            'client_data_json' => ['nullable', 'string'],
             'public_key' => ['nullable', 'string'],
             'device_name' => ['nullable', 'string', 'max:255'],
         ]);
 
         try {
-            $credential = $this->webAuthnService->registerCredential($user, $validated);
+            $credential = $this->webAuthnService->registerCredential($user, $request->all());
 
             return response()->json([
                 'success' => true,
-                'message' => 'Device registered successfully for secure attendance verification.',
+                'message' => 'Device registration submitted successfully. Please wait for an administrator to approve your device passkey.',
                 'credential' => $credential,
             ]);
         } catch (\InvalidArgumentException $e) {
@@ -109,21 +131,24 @@ class AttendanceController extends Controller
     public function getAssertionOptions()
     {
         $user = Auth::user();
-        return response()->json($this->webAuthnService->generateAssertionOptions($user));
+        $options = $this->webAuthnService->generateAssertionOptions($user);
+        return response()->json($options);
     }
 
     public function checkIn(Request $request)
     {
         $user = Auth::user();
         $today = Carbon::today();
-        $clientIp = $request->ip();
 
-        // 1. Attendance module global status
+        // 1. Check if attendance module is globally enabled
         if (!AttendanceSetting::get('attendance_enabled', true)) {
-            return response()->json(['success' => false, 'message' => 'Attendance check-in is currently disabled by administrator.'], 403);
+            return response()->json([
+                'success' => false,
+                'message' => 'Attendance module is currently disabled by administrator.',
+            ], 422);
         }
 
-        // 2. Prevent duplicate check-ins
+        // 2. Check if already checked in today
         $existingRecord = AttendanceRecord::where('user_id', $user->id)
             ->whereDate('attendance_date', $today)
             ->first();
@@ -131,11 +156,12 @@ class AttendanceController extends Controller
         if ($existingRecord && $existingRecord->check_in_at) {
             return response()->json([
                 'success' => false,
-                'message' => 'You have already checked in today at ' . $existingRecord->check_in_at->format('g:i A') . '.',
+                'message' => 'You have already checked in for today (' . $existingRecord->check_in_at->format('g:i A') . ').',
             ], 422);
         }
 
-        // 3. Office Network Verification
+        // 3. Network Verification
+        $clientIp = self::resolveClientIp($request);
         $enabledNetworks = AttendanceNetwork::where('enabled', true)->get();
         $isNetworkVerified = false;
 
@@ -160,7 +186,7 @@ class AttendanceController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Check-in failed. Request must originate from an approved office network.',
+                'message' => 'Check-in failed. Request must originate from an approved office network (Your IP: ' . $clientIp . ').',
             ], 403);
         }
 
@@ -225,9 +251,7 @@ class AttendanceController extends Controller
     {
         $user = Auth::user();
         $today = Carbon::today();
-        $clientIp = $request->ip();
 
-        // 1. Check existing record
         $record = AttendanceRecord::where('user_id', $user->id)
             ->whereDate('attendance_date', $today)
             ->first();
@@ -235,18 +259,19 @@ class AttendanceController extends Controller
         if (!$record || !$record->check_in_at) {
             return response()->json([
                 'success' => false,
-                'message' => 'Invalid check-out. You must check in first before checking out.',
+                'message' => 'You must check in first before checking out.',
             ], 422);
         }
 
         if ($record->check_out_at) {
             return response()->json([
                 'success' => false,
-                'message' => 'You have already checked out today at ' . $record->check_out_at->format('g:i A') . '.',
+                'message' => 'You have already checked out for today at ' . $record->check_out_at->format('g:i A') . '.',
             ], 422);
         }
 
-        // 2. Office Network Verification
+        // Network Verification
+        $clientIp = self::resolveClientIp($request);
         $enabledNetworks = AttendanceNetwork::where('enabled', true)->get();
         $isNetworkVerified = false;
 
@@ -266,17 +291,16 @@ class AttendanceController extends Controller
                 eventType: 'failed_network_verification',
                 actor: $user,
                 affectedUser: $user,
-                record: $record,
                 reason: 'Check-out attempt from unapproved network IP: ' . $clientIp
             );
 
             return response()->json([
                 'success' => false,
-                'message' => 'Check-out failed. Request must originate from an approved office network.',
+                'message' => 'Check-out failed. Request must originate from an approved office network (Your IP: ' . $clientIp . ').',
             ], 403);
         }
 
-        // 3. WebAuthn Credential Verification
+        // WebAuthn Credential Verification
         $credentialId = $request->input('credential_id');
         $clientDataJson = $request->input('client_data_json');
 
@@ -292,11 +316,9 @@ class AttendanceController extends Controller
             ], 422);
         }
 
-        // 4. Update check-out
         $now = Carbon::now();
         $record->update([
             'check_out_at' => $now,
-            'check_out_method' => 'webauthn',
             'check_out_network_verified' => true,
             'check_out_ip' => $clientIp,
             'check_out_credential_id' => $credential->id,
@@ -313,20 +335,19 @@ class AttendanceController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Checked out successfully',
+            'message' => 'Check-out successful',
             'check_out_time' => $now->format('g:i A'),
             'record' => $record,
         ]);
     }
 
-    public function history(Request $request)
+    public function history()
     {
         $user = Auth::user();
-
-        $history = AttendanceRecord::where('user_id', $user->id)
+        $records = AttendanceRecord::where('user_id', $user->id)
             ->orderBy('attendance_date', 'desc')
             ->paginate(15);
 
-        return view('attendance.history', compact('user', 'history'));
+        return view('attendance.history', compact('user', 'records'));
     }
 }
