@@ -1,0 +1,46 @@
+<?php
+
+use App\Http\Controllers\Attendance\AdminAttendanceController as AdminAttendance;
+use App\Http\Controllers\Attendance\AttendanceController;
+use App\Http\Controllers\Auth\AuthController;
+use Illuminate\Support\Facades\Route;
+
+// Authentication Routes
+Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
+Route::post('/login', [AuthController::class, 'login']);
+Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+
+// Authenticated Staff Routes
+Route::middleware(['auth'])->group(function () {
+    Route::get('/', [AttendanceController::class, 'dashboard'])->name('attendance.dashboard');
+    Route::get('/attendance', [AttendanceController::class, 'dashboard']);
+    Route::get('/attendance/history', [AttendanceController::class, 'history'])->name('attendance.history');
+
+    // WebAuthn Passkey API Endpoints
+    Route::get('/attendance/register-options', [AttendanceController::class, 'getRegisterOptions'])->name('attendance.register-options');
+    Route::post('/attendance/register-device', [AttendanceController::class, 'registerDevice'])->name('attendance.register-device');
+    Route::get('/attendance/assertion-options', [AttendanceController::class, 'getAssertionOptions'])->name('attendance.assertion-options');
+    Route::post('/attendance/check-in', [AttendanceController::class, 'checkIn'])->name('attendance.check-in');
+    Route::post('/attendance/check-out', [AttendanceController::class, 'checkOut'])->name('attendance.check-out');
+
+    // Admin & Management Routes
+    Route::prefix('admin/attendance')->name('admin.attendance.')->group(function () {
+        Route::get('/', [AdminAttendance::class, 'index'])->name('index');
+        Route::get('/analytics', [AdminAttendance::class, 'analytics'])->name('analytics');
+        Route::get('/user/{user}', [AdminAttendance::class, 'showUserHistory'])->name('user-history');
+        Route::post('/correct/{record}', [AdminAttendance::class, 'correctRecord'])->name('correct');
+        Route::post('/manual-record', [AdminAttendance::class, 'storeManualRecord'])->name('manual-record');
+        Route::post('/deactivate-credential/{credential}', [AdminAttendance::class, 'deactivateCredential'])->name('deactivate-credential');
+        Route::post('/allow-replacement/{user}', [AdminAttendance::class, 'allowDeviceReplacement'])->name('allow-replacement');
+
+        // Networks
+        Route::get('/networks', [AdminAttendance::class, 'networks'])->name('networks');
+        Route::post('/networks', [AdminAttendance::class, 'storeNetwork'])->name('networks.store');
+        Route::post('/networks/{network}/toggle', [AdminAttendance::class, 'toggleNetwork'])->name('networks.toggle');
+        Route::delete('/networks/{network}', [AdminAttendance::class, 'destroyNetwork'])->name('networks.destroy');
+
+        // Settings
+        Route::get('/settings', [AdminAttendance::class, 'settings'])->name('settings');
+        Route::post('/settings', [AdminAttendance::class, 'updateSettings'])->name('settings.update');
+    });
+});
