@@ -13,7 +13,11 @@ class AuthController extends Controller
     public function showLoginForm()
     {
         if (Auth::check()) {
-            return redirect()->route('attendance.dashboard');
+            /** @var User $user */
+            $user = Auth::user();
+            return $user->isAdmin()
+                ? redirect()->route('admin.attendance.index')
+                : redirect()->route('attendance.dashboard');
         }
 
         return view('auth.login');
@@ -37,6 +41,11 @@ class AuthController extends Controller
                 return back()->withErrors(['email' => 'Your staff account is pending administrator approval. Please wait for an admin to approve your account.']);
             }
 
+            // Smart Redirect: Admins land on Admin Dashboard; Staff land on Staff Portal
+            if ($user->isAdmin()) {
+                return redirect()->intended(route('admin.attendance.index'));
+            }
+
             return redirect()->intended(route('attendance.dashboard'));
         }
 
@@ -48,7 +57,11 @@ class AuthController extends Controller
     public function showRegisterForm()
     {
         if (Auth::check()) {
-            return redirect()->route('attendance.dashboard');
+            /** @var User $user */
+            $user = Auth::user();
+            return $user->isAdmin()
+                ? redirect()->route('admin.attendance.index')
+                : redirect()->route('attendance.dashboard');
         }
 
         return view('auth.register');
