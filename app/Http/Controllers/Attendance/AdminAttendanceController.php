@@ -28,6 +28,7 @@ class AdminAttendanceController extends Controller
     public function index(Request $request)
     {
         $this->authorizeAdmin();
+        $this->autoCheckoutForgottenRecords();
 
         $selectedDate = $request->input('date', Carbon::today()->toDateString());
         $date = Carbon::parse($selectedDate);
@@ -475,6 +476,8 @@ class AdminAttendanceController extends Controller
             'check_in_closing_time' => AttendanceSetting::get('check_in_closing_time', '12:00'),
             'check_out_availability_time' => AttendanceSetting::get('check_out_availability_time', '16:00'),
             'late_threshold_minutes' => AttendanceSetting::get('late_threshold_minutes', 15),
+            'auto_checkout_enabled' => AttendanceSetting::get('auto_checkout_enabled', true),
+            'auto_checkout_time' => AttendanceSetting::get('auto_checkout_time', '17:00'),
             'timezone' => AttendanceSetting::get('timezone', config('app.timezone', 'UTC')),
             'working_days' => AttendanceSetting::get('working_days', ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']),
         ];
@@ -493,6 +496,8 @@ class AdminAttendanceController extends Controller
             'check_in_closing_time' => ['required', 'string'],
             'check_out_availability_time' => ['required', 'string'],
             'late_threshold_minutes' => ['required', 'integer', 'min:0', 'max:180'],
+            'auto_checkout_enabled' => ['boolean'],
+            'auto_checkout_time' => ['required', 'string'],
             'timezone' => ['required', 'string'],
             'working_days' => ['required', 'array'],
         ]);
@@ -503,9 +508,44 @@ class AdminAttendanceController extends Controller
         AttendanceSetting::set('check_in_closing_time', $validated['check_in_closing_time']);
         AttendanceSetting::set('check_out_availability_time', $validated['check_out_availability_time']);
         AttendanceSetting::set('late_threshold_minutes', (int) $validated['late_threshold_minutes']);
+        AttendanceSetting::set('auto_checkout_enabled', $request->boolean('auto_checkout_enabled'));
+        AttendanceSetting::set('auto_checkout_time', $validated['auto_checkout_time']);
         AttendanceSetting::set('timezone', $validated['timezone']);
         AttendanceSetting::set('working_days', $validated['working_days']);
 
-        return back()->with('success', 'Attendance rules and settings saved successfully.');
+        return back()->with('success', 'Attendance rules and auto check-out settings saved successfully.');
+    }
+
+    protected function autoCheckoutForgottenRecords(): void
+    {
+        if (!AttendanceSetting::get('auto_checkout_enabled', true)) {
+            return;
+        }
+
+        $autoTime = AttendanceSetting::get('auto_checkout_time', '17:00');
+
+        $unclosedRecords = AttendanceRecord::whereNotNull('check_in_at')
+            ->whereNull('check_out_at')
+            ->get();
+
+        foreach ($unclosedRecords as $rec) {
+            $recDate = $rec->attendance_date;
+            $autoCheckoutDateTime = Carbon::parse($recDate->toDateString() . ' ' . $autoTime);
+
+            if (Carbon::now()->greaterThanOrEqualTo($autoCheckoutDateTime)) {
+                $rec->update([
+                    'check_out_at' => $autoCheckoutDateTime,
+                    'notes' => trim(($rec->notes ? $rec->notes . ' | ' : '') . 'System Auto Check-Out (Forgotten Check-Out)'),
+                ]);
+
+                AttendanceAuditLog::logEvent(
+                    eventType: 'auto_checkout',
+                    actor: null,
+                    affectedUser: $rec->user,
+                    record: $rec,
+                    reason: 'Automatic Auto Check-Out triggered for forgotten check-out'
+                );
+            }
+        }
     }
 }
