@@ -447,6 +447,27 @@ class AdminAttendanceController extends Controller
         return back()->with('success', 'Office network range added successfully.');
     }
 
+    public function updateNetwork(Request $request, AttendanceNetwork $network)
+    {
+        $this->authorizeAdmin();
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'ip_range' => ['required', 'string', 'max:500'],
+            'description' => ['nullable', 'string', 'max:1000'],
+            'enabled' => ['boolean'],
+        ]);
+
+        $network->update([
+            'name' => $validated['name'],
+            'ip_range' => $validated['ip_range'],
+            'description' => $validated['description'] ?? null,
+            'enabled' => $request->boolean('enabled'),
+        ]);
+
+        return back()->with('success', 'Office network updated successfully.');
+    }
+
     public function toggleNetwork(AttendanceNetwork $network)
     {
         $this->authorizeAdmin();

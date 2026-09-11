@@ -47,6 +47,7 @@ Route::middleware(['auth'])->group(function () {
         // Networks
         Route::get('/networks', [AdminAttendance::class, 'networks'])->name('networks');
         Route::post('/networks', [AdminAttendance::class, 'storeNetwork'])->name('networks.store');
+        Route::put('/networks/{network}', [AdminAttendance::class, 'updateNetwork'])->name('networks.update');
         Route::post('/networks/{network}/toggle', [AdminAttendance::class, 'toggleNetwork'])->name('networks.toggle');
         Route::delete('/networks/{network}', [AdminAttendance::class, 'destroyNetwork'])->name('networks.destroy');
 

@@ -11,8 +11,8 @@
             <p class="text-xs text-slate-500">Configure public IP / CIDR ranges for server-side office network verification</p>
         </div>
 
-        <button type="button" onclick="document.getElementById('add-network-modal').classList.remove('hidden')" class="bg-[#0A1428] hover:bg-slate-800 text-white font-bold text-xs py-2 px-4 rounded-lg shadow flex items-center gap-2">
-            <svg class="w-4 h-4 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        <button type="button" onclick="document.getElementById('add-network-modal').classList.remove('hidden')" class="bg-[#0f172a] hover:bg-slate-800 text-white font-bold text-xs py-2 px-4 rounded-lg shadow flex items-center gap-2">
+            <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
             <span>Add Office Network CIDR</span>
         </button>
     </div>
@@ -38,7 +38,7 @@
                     @forelse($networks as $net)
                         <tr class="hover:bg-slate-50">
                             <td class="p-3.5 font-bold text-slate-900">{{ $net->name }}</td>
-                            <td class="p-3.5 font-mono text-xs font-bold text-sky-700">{{ $net->ip_range }}</td>
+                            <td class="p-3.5 font-mono text-xs font-bold text-indigo-700">{{ $net->ip_range }}</td>
                             <td class="p-3.5 text-slate-500">{{ $net->description ?: 'No description' }}</td>
                             <td class="p-3.5">
                                 @if($net->enabled)
@@ -48,6 +48,10 @@
                                 @endif
                             </td>
                             <td class="p-3.5 text-right space-x-2">
+                                <button type="button" onclick="openEditNetworkModal({{ $net->id }}, '{{ addslashes($net->name) }}', '{{ addslashes($net->ip_range) }}', '{{ addslashes($net->description ?? '') }}', {{ $net->enabled ? 1 : 0 }})" class="text-xs font-bold text-indigo-600 hover:text-indigo-800 border border-indigo-200 px-2.5 py-1 rounded shadow-sm">
+                                    Edit
+                                </button>
+
                                 <form method="POST" action="{{ route('admin.attendance.networks.toggle', $net) }}" class="inline">
                                     @csrf
                                     <button type="submit" class="text-xs font-bold {{ $net->enabled ? 'text-amber-600 hover:text-amber-800' : 'text-emerald-600 hover:text-emerald-800' }}">
@@ -100,15 +104,68 @@
             </div>
 
             <div class="flex items-center gap-2">
-                <input type="checkbox" name="enabled" value="1" id="enabled-chk" checked class="rounded border-slate-300 text-sky-600">
+                <input type="checkbox" name="enabled" value="1" id="enabled-chk" checked class="rounded border-slate-300 text-indigo-600">
                 <label for="enabled-chk" class="text-xs font-bold text-slate-700">Enable immediately</label>
             </div>
 
             <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
                 <button type="button" onclick="document.getElementById('add-network-modal').classList.add('hidden')" class="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800">Cancel</button>
-                <button type="submit" class="bg-[#0A1428] hover:bg-slate-800 text-white font-bold text-xs py-2 px-4 rounded-lg shadow">Save Network Range</button>
+                <button type="submit" class="bg-[#0f172a] hover:bg-slate-800 text-white font-bold text-xs py-2 px-4 rounded-lg shadow">Save Network Range</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Network Modal -->
+<div id="edit-network-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-200">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 class="font-extrabold text-base text-slate-900">Edit Office Network</h3>
+            <button type="button" onclick="document.getElementById('edit-network-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-lg font-bold">&times;</button>
+        </div>
+
+        <form id="edit-network-form" method="POST" action="" class="space-y-4">
+            @csrf
+            @method('PUT')
+            <div>
+                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Network Label / Name</label>
+                <input type="text" name="name" id="edit-net-name" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-bold">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">IP Range / CIDR Notation</label>
+                <input type="text" name="ip_range" id="edit-net-ip" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono font-bold">
+                <p class="text-[10px] text-slate-400 mt-1">Accepts IPv4/IPv6 CIDR ranges, comma-separated lists, or exact IP addresses.</p>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Description (Optional)</label>
+                <textarea name="description" id="edit-net-desc" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium"></textarea>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <input type="checkbox" name="enabled" value="1" id="edit-net-enabled" class="rounded border-slate-300 text-indigo-600">
+                <label for="edit-net-enabled" class="text-xs font-bold text-slate-700">Network Enabled</label>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button type="button" onclick="document.getElementById('edit-network-modal').classList.add('hidden')" class="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800">Cancel</button>
+                <button type="submit" class="bg-[#0f172a] hover:bg-slate-800 text-white font-bold text-xs py-2 px-4 rounded-lg shadow">Update Network</button>
             </div>
         </form>
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+    function openEditNetworkModal(id, name, ipRange, description, enabled) {
+        document.getElementById('edit-network-form').action = "/admin/attendance/networks/" + id;
+        document.getElementById('edit-net-name').value = name;
+        document.getElementById('edit-net-ip').value = ipRange;
+        document.getElementById('edit-net-desc').value = description;
+        document.getElementById('edit-net-enabled').checked = enabled === 1;
+        document.getElementById('edit-network-modal').classList.remove('hidden');
+    }
+</script>
+@endpush
