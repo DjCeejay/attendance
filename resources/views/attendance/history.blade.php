@@ -9,19 +9,19 @@
             <h2 class="text-xl font-extrabold text-slate-900">Attendance History</h2>
             <p class="text-xs text-slate-500">Your personal check-in & check-out records</p>
         </div>
-        <a href="{{ route('attendance.dashboard') }}" class="text-xs font-bold text-sky-600 hover:text-sky-800">
+        <a href="{{ route('attendance.dashboard') }}" class="text-xs font-bold text-indigo-600 hover:text-indigo-800">
             &larr; Dashboard
         </a>
     </div>
 
     <div class="bg-white rounded-2xl border border-slate-200/80 shadow-md overflow-hidden">
-        @if($history->isEmpty())
+        @if($records->isEmpty())
             <div class="p-8 text-center text-slate-500 text-xs">
                 No attendance records found.
             </div>
         @else
             <div class="divide-y divide-slate-100">
-                @foreach($history as $rec)
+                @foreach($records as $rec)
                     <div class="p-4 flex items-center justify-between hover:bg-slate-50 transition">
                         <div>
                             <div class="text-sm font-extrabold text-slate-900">
@@ -53,7 +53,7 @@
             </div>
 
             <div class="p-4 border-t border-slate-100">
-                {{ $history->links() }}
+                {{ $records->links() }}
             </div>
         @endif
     </div>

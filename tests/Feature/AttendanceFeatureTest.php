@@ -197,4 +197,21 @@ class AttendanceFeatureTest extends TestCase
         $response->assertSee('Staff Attendance Analytics');
         $response->assertSee('Alice Late Staff');
     }
+
+    /** 8. Staff can view personal attendance history */
+    public function test_staff_can_view_personal_attendance_history(): void
+    {
+        $staff = $this->createUser();
+        AttendanceRecord::create([
+            'user_id' => $staff->id,
+            'attendance_date' => Carbon::today()->toDateString(),
+            'check_in_at' => now(),
+            'status' => 'present',
+        ]);
+
+        $response = $this->actingAs($staff)->get(route('attendance.history'));
+
+        $response->assertStatus(200);
+        $response->assertSee('Attendance History');
+    }
 }
