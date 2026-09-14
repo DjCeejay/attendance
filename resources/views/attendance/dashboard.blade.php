@@ -419,6 +419,7 @@
                     const publicKey = {
                         challenge: Uint8Array.from(atob(options.challenge.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)),
                         allowCredentials: allowCreds,
+                        userVerification: 'required',
                         timeout: options.timeout
                     };
 
@@ -428,16 +429,15 @@
                         client_data_json: arrayBufferToBase64Url(assertion.response.clientDataJSON)
                     };
                 } catch (credErr) {
-                    payload = {
-                        credential_id: "{{ $activeCredential?->credential_id }}",
-                        client_data_json: ""
-                    };
+                    console.warn('WebAuthn prompt canceled/failed:', credErr);
+                    showAlert('error', 'Device verification canceled or failed. You must input your device password/fingerprint to check in.');
+                    if (btn) btn.disabled = false;
+                    return;
                 }
             } else {
-                payload = {
-                    credential_id: "{{ $activeCredential?->credential_id }}",
-                    client_data_json: ""
-                };
+                showAlert('error', 'No registered device passkey found on account. Please register your device first.');
+                if (btn) btn.disabled = false;
+                return;
             }
 
             const url = actionType === 'check-in' ? "{{ route('attendance.check-in') }}" : "{{ route('attendance.check-out') }}";

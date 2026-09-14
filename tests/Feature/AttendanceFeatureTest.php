@@ -110,10 +110,17 @@ class AttendanceFeatureTest extends TestCase
     {
         $staff = $this->createUser();
 
+        $challenge = 'test_challenge_123';
+        session(['webauthn_challenge' => $challenge]);
+        $clientDataJson = \App\Services\WebAuthnService::base64UrlEncode(json_encode([
+            'challenge' => \App\Services\WebAuthnService::base64UrlEncode($challenge)
+        ]));
+
         $response = $this->actingAs($staff)->postJson(route('attendance.register-device'), [
             'credential_id' => 'cred_pending_123',
             'public_key' => 'pubkey_xyz',
             'device_name' => "Staff Mobile Phone",
+            'client_data_json' => $clientDataJson,
         ]);
 
         $response->assertStatus(200);
@@ -140,10 +147,17 @@ class AttendanceFeatureTest extends TestCase
         $pendingCred->refresh();
         $this->assertEquals('approved', $pendingCred->approval_status);
 
+        $challenge = 'test_challenge_123';
+        session(['webauthn_challenge' => $challenge]);
+        $clientDataJson = \App\Services\WebAuthnService::base64UrlEncode(json_encode([
+            'challenge' => \App\Services\WebAuthnService::base64UrlEncode($challenge)
+        ]));
+
         $checkInSuccess = $this->actingAs($staff->fresh())
             ->withServerVariables(['REMOTE_ADDR' => '127.0.0.1'])
             ->postJson(route('attendance.check-in'), [
                 'credential_id' => 'cred_unapproved_123',
+                'client_data_json' => $clientDataJson,
             ]);
 
         $checkInSuccess->assertStatus(200);
@@ -169,10 +183,17 @@ class AttendanceFeatureTest extends TestCase
         $this->createApprovedNetwork('127.0.0.1/32');
         $cred = $this->registerCredentialForUser($staff, 'cred_john_passkey', 'approved');
 
+        $challenge = 'test_challenge_123';
+        session(['webauthn_challenge' => $challenge]);
+        $clientDataJson = \App\Services\WebAuthnService::base64UrlEncode(json_encode([
+            'challenge' => \App\Services\WebAuthnService::base64UrlEncode($challenge)
+        ]));
+
         $response = $this->actingAs($staff)
             ->withServerVariables(['REMOTE_ADDR' => '127.0.0.1'])
             ->postJson(route('attendance.check-in'), [
                 'credential_id' => 'cred_john_passkey',
+                'client_data_json' => $clientDataJson,
             ]);
 
         $response->assertStatus(200);
@@ -183,6 +204,24 @@ class AttendanceFeatureTest extends TestCase
             'check_in_credential_id' => $cred->id,
             'check_in_network_verified' => true,
         ]);
+    }
+
+    /** 7. Canceling device passkey prompt fails check-in */
+    public function test_canceling_device_passkey_prompt_fails_checkin(): void
+    {
+        $staff = $this->createUser();
+        $this->createApprovedNetwork('127.0.0.1/32');
+        $cred = $this->registerCredentialForUser($staff, 'cred_john_passkey', 'approved');
+
+        $response = $this->actingAs($staff)
+            ->withServerVariables(['REMOTE_ADDR' => '127.0.0.1'])
+            ->postJson(route('attendance.check-in'), [
+                'credential_id' => 'cred_john_passkey',
+                'client_data_json' => '', // User canceled prompt
+            ]);
+
+        $response->assertStatus(422);
+        $response->assertJson(['success' => false]);
     }
 
     /** 7. Admin can view staff analytics */

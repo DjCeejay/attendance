@@ -33,7 +33,7 @@ class WebAuthnService
                 ['type' => 'public-key', 'alg' => -257], // RS256
             ],
             'authenticatorSelection' => [
-                'userVerification' => 'preferred',
+                'userVerification' => 'required',
             ],
             'timeout' => 60000,
         ];
@@ -49,13 +49,21 @@ class WebAuthnService
             throw new \InvalidArgumentException('You already have an active registered device for attendance. Replacing a device requires administrator authorization.');
         }
 
+        if (empty($payload['client_data_json'])) {
+            throw new \InvalidArgumentException('Device passkey verification is required to register this device.');
+        }
+
         $storedChallenge = session('webauthn_challenge');
-        $clientDataJsonRaw = isset($payload['client_data_json']) ? self::base64UrlDecode($payload['client_data_json']) : '';
+        $clientDataJsonRaw = self::base64UrlDecode($payload['client_data_json']);
         $clientData = json_decode($clientDataJsonRaw, true);
 
-        if ($storedChallenge && is_array($clientData)) {
-            $receivedChallenge = isset($clientData['challenge']) ? self::base64UrlDecode($clientData['challenge']) : '';
-            if ($receivedChallenge !== '' && $receivedChallenge !== $storedChallenge) {
+        if (!is_array($clientData) || empty($clientData['challenge'])) {
+            throw new \InvalidArgumentException('Invalid cryptographic response from device.');
+        }
+
+        if ($storedChallenge) {
+            $receivedChallenge = self::base64UrlDecode($clientData['challenge']);
+            if ($receivedChallenge !== $storedChallenge) {
                 throw new \InvalidArgumentException('Invalid cryptographic challenge.');
             }
         }
@@ -119,6 +127,7 @@ class WebAuthnService
                     'id' => $activeCredential->credential_id,
                 ],
             ] : [],
+            'userVerification' => 'required',
             'timeout' => 60000,
         ];
     }
@@ -160,13 +169,28 @@ class WebAuthnService
             throw new \InvalidArgumentException('Attendance verification failed. This device is not registered for this account.');
         }
 
+        // Strict verification of client_data_json from WebAuthn assertion response
+        if (empty($payload['client_data_json'])) {
+            AttendanceAuditLog::logEvent(
+                eventType: 'failed_device_verification',
+                actor: $user,
+                affectedUser: $user,
+                reason: 'Attendance verification failed: User canceled or bypassed device passkey prompt'
+            );
+            throw new \InvalidArgumentException('Device verification required. You must complete your device biometric/password prompt to check in.');
+        }
+
         $storedChallenge = session('webauthn_challenge');
-        $clientDataJsonRaw = isset($payload['client_data_json']) ? self::base64UrlDecode($payload['client_data_json']) : '';
+        $clientDataJsonRaw = self::base64UrlDecode($payload['client_data_json']);
         $clientData = json_decode($clientDataJsonRaw, true);
 
-        if ($storedChallenge && is_array($clientData)) {
-            $receivedChallenge = isset($clientData['challenge']) ? self::base64UrlDecode($clientData['challenge']) : '';
-            if ($receivedChallenge !== '' && $receivedChallenge !== $storedChallenge) {
+        if (!is_array($clientData) || empty($clientData['challenge'])) {
+            throw new \InvalidArgumentException('Attendance verification failed. Invalid cryptographic response from device.');
+        }
+
+        if ($storedChallenge) {
+            $receivedChallenge = self::base64UrlDecode($clientData['challenge']);
+            if ($receivedChallenge !== $storedChallenge) {
                 throw new \InvalidArgumentException('Attendance verification failed. Invalid authentication challenge.');
             }
         }
