@@ -100,26 +100,60 @@ class AttendanceController extends Controller
             }
         }
 
+        if ($record) {
+            $this->syncRecordStatusWithTimezone($record);
+            $record->refresh();
+        }
+
         $attendanceEnabled = AttendanceSetting::get('attendance_enabled', true);
         $expectedArrival   = AttendanceSetting::get('expected_arrival_time', '09:00');
         $checkInStart      = AttendanceSetting::get('check_in_start_time', '07:00');
         $checkInClosing    = AttendanceSetting::get('check_in_closing_time', '12:00');
 
-        return view('attendance.dashboard', compact(
-            'user',
-            'today',
-            'tz',
-            'record',
-            'hasRegisteredDevice',
-            'activeCredential',
-            'isNetworkVerified',
-            'matchedNetwork',
-            'clientIp',
-            'attendanceEnabled',
-            'expectedArrival',
-            'checkInStart',
-            'checkInClosing'
-        ));
+        return response()
+            ->view('attendance.dashboard', compact(
+                'user',
+                'today',
+                'tz',
+                'record',
+                'hasRegisteredDevice',
+                'activeCredential',
+                'isNetworkVerified',
+                'matchedNetwork',
+                'clientIp',
+                'attendanceEnabled',
+                'expectedArrival',
+                'checkInStart',
+                'checkInClosing'
+            ))
+            ->header('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0')
+            ->header('Pragma', 'no-cache')
+            ->header('Expires', '0');
+    }
+
+    protected function syncRecordStatusWithTimezone(?AttendanceRecord $record): void
+    {
+        if (!$record || !$record->check_in_at) {
+            return;
+        }
+
+        $tz = self::appTz();
+        $dateStr = $record->attendance_date->toDateString();
+        $expectedTimeStr = AttendanceSetting::get('expected_arrival_time', '09:00');
+        $lateThreshold = (int) AttendanceSetting::get('late_threshold_minutes', 15);
+
+        // Convert check_in_at to local WAT timezone
+        $checkInLocal = Carbon::parse($record->check_in_at)->setTimezone($tz);
+
+        // Calculate expected arrival deadline in WAT
+        $expectedArrival = Carbon::createFromFormat('Y-m-d H:i', $dateStr . ' ' . $expectedTimeStr, $tz);
+        $lateDeadline = (clone $expectedArrival)->addMinutes($lateThreshold);
+
+        $expectedStatus = $checkInLocal->greaterThan($lateDeadline) ? 'late' : 'present';
+
+        if ($record->status !== $expectedStatus) {
+            $record->update(['status' => $expectedStatus]);
+        }
     }
 
     public function getRegisterOptions()
@@ -382,6 +416,14 @@ class AttendanceController extends Controller
             ->orderBy('attendance_date', 'desc')
             ->paginate(15);
 
-        return view('attendance.history', compact('user', 'records'));
+        foreach ($records as $r) {
+            $this->syncRecordStatusWithTimezone($r);
+        }
+
+        return response()
+            ->view('attendance.history', compact('user', 'records'))
+            ->header('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0')
+            ->header('Pragma', 'no-cache')
+            ->header('Expires', '0');
     }
 }
