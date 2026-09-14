@@ -196,6 +196,38 @@ class AttendanceController extends Controller
         return response()->json($options);
     }
 
+    public function logClientError(Request $request)
+    {
+        $user = Auth::user();
+
+        $validated = $request->validate([
+            'action' => ['nullable', 'string', 'max:80'],
+            'stage' => ['nullable', 'string', 'max:80'],
+            'name' => ['nullable', 'string', 'max:120'],
+            'message' => ['nullable', 'string', 'max:500'],
+            'host' => ['nullable', 'string', 'max:255'],
+            'rp_id' => ['nullable', 'string', 'max:255'],
+            'user_agent' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        AttendanceAuditLog::logEvent(
+            eventType: 'failed_device_verification',
+            actor: $user,
+            affectedUser: $user,
+            newValues: $validated,
+            reason: 'Client-side WebAuthn failure during '
+                . ($validated['action'] ?? 'attendance action')
+                . ' at '
+                . ($validated['stage'] ?? 'unknown stage')
+                . ': '
+                . ($validated['name'] ?? 'Error')
+                . ' - '
+                . ($validated['message'] ?? 'No browser message')
+        );
+
+        return response()->json(['success' => true]);
+    }
+
     public function checkIn(Request $request)
     {
         /** @var \App\Models\User $user */

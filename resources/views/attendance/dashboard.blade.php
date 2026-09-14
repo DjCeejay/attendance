@@ -215,6 +215,11 @@
     </div>
 </div>
 
+<div id="attendance-config"
+    data-registered-device="{{ $hasRegisteredDevice ? '1' : '0' }}"
+    data-approved-device="{{ $activeCredential && $activeCredential->isApproved() ? '1' : '0' }}"
+    hidden></div>
+
 <!-- iOS Add to Home Screen Instructions Modal -->
 <div id="ios-install-modal" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
     <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 text-center border border-slate-200">
@@ -266,6 +271,9 @@
 
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const attendanceConfig = document.getElementById('attendance-config');
+    const hasRegisteredDevice = attendanceConfig?.dataset.registeredDevice === '1';
+    const hasApprovedDevice = attendanceConfig?.dataset.approvedDevice === '1';
 
     document.addEventListener('DOMContentLoaded', () => {
         // Hide install prompt if already running inside installed standalone app
@@ -279,6 +287,8 @@
             document.getElementById('btn-check-in')?.setAttribute('disabled', 'disabled');
             document.getElementById('btn-check-out')?.setAttribute('disabled', 'disabled');
         }
+
+        watchForDeviceApproval();
     });
 
     // Android Chrome `beforeinstallprompt` Event Capture
@@ -331,6 +341,87 @@
         if (navigator.vibrate) navigator.vibrate(200);
     }
 
+    function setActionButtonState(btn, isLoading, label) {
+        if (!btn) return;
+
+        btn.disabled = isLoading;
+        const labelEl = btn.querySelector('span');
+        if (labelEl) {
+            if (!btn.dataset.originalLabel) {
+                btn.dataset.originalLabel = labelEl.textContent;
+            }
+            labelEl.textContent = isLoading ? label : btn.dataset.originalLabel;
+        }
+    }
+
+    async function logClientWebAuthnError(action, stage, err, options = {}) {
+        try {
+            await fetch("{{ route('attendance.client-error') }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    action,
+                    stage,
+                    name: err?.name || 'Error',
+                    message: err?.message || String(err || 'Unknown browser error'),
+                    host: window.location.hostname,
+                    rp_id: options.rpId || null,
+                    user_agent: navigator.userAgent
+                })
+            });
+        } catch (logErr) {
+            console.debug('Unable to log WebAuthn client error:', logErr);
+        }
+    }
+
+    function webAuthnUnavailableMessage(options = {}) {
+        if (!window.isSecureContext) {
+            return 'Device verification requires HTTPS. Please open the secure attendance link.';
+        }
+
+        if (!window.PublicKeyCredential || !navigator.credentials) {
+            return 'This browser cannot open the phone passkey prompt. Please use Chrome on the Samsung phone.';
+        }
+
+        if (options.rpId && window.location.hostname !== options.rpId) {
+            return 'This passkey belongs to ' + options.rpId + '. Open attendance using that exact link, then try again.';
+        }
+
+        return null;
+    }
+
+    function watchForDeviceApproval() {
+        if (!hasRegisteredDevice || hasApprovedDevice) return;
+
+        const checkInButton = document.getElementById('btn-check-in');
+        const checkOutButton = document.getElementById('btn-check-out');
+        if (!checkInButton && !checkOutButton) return;
+
+        const approvalPoller = window.setInterval(async () => {
+            try {
+                const response = await fetch("{{ route('attendance.assertion-options') }}", {
+                    headers: { 'Accept': 'application/json' },
+                    credentials: 'same-origin'
+                });
+
+                if (!response.ok) return;
+
+                const options = await response.json();
+                if (options.allowCredentials && options.allowCredentials.length > 0) {
+                    window.clearInterval(approvalPoller);
+                    showAlert('success', 'Device approved. Reloading check-in controls...');
+                    window.setTimeout(() => window.location.reload(), 800);
+                }
+            } catch (err) {
+                console.debug('Device approval polling skipped:', err);
+            }
+        }, 8000);
+    }
+
     function arrayBufferToBase64Url(buffer) {
         let binary = '';
         let bytes = new Uint8Array(buffer);
@@ -354,11 +445,18 @@
 
     async function registerDevice() {
         const btn = document.getElementById('btn-register-device');
-        if (btn) btn.disabled = true;
+        setActionButtonState(btn, true, 'Opening Device Security...');
 
         try {
             const optRes = await fetch("{{ route('attendance.register-options') }}");
             const options = await optRes.json();
+            const unavailableMessage = webAuthnUnavailableMessage({ rpId: options.rp?.id });
+
+            if (unavailableMessage) {
+                await logClientWebAuthnError('register-device', 'browser-support', new Error(unavailableMessage), { rpId: options.rp?.id });
+                showAlert('error', unavailableMessage);
+                return;
+            }
 
             let credential;
             if (window.PublicKeyCredential) {
@@ -377,7 +475,8 @@
 
                 const rawCredential = await navigator.credentials.create({ publicKey });
                 credential = {
-                    credential_id: rawCredential.id,
+                    credential_id: arrayBufferToBase64Url(rawCredential.rawId),
+                    raw_id: arrayBufferToBase64Url(rawCredential.rawId),
                     client_data_json: arrayBufferToBase64Url(rawCredential.response.clientDataJSON),
                     public_key: rawCredential.id,
                     device_name: 'Registered Device (' + (navigator.userAgent.includes('(') ? navigator.userAgent.split(')')[0].split('(')[1] : 'Android') + ')'
@@ -406,20 +505,28 @@
             }
         } catch (err) {
             console.error(err);
+            await logClientWebAuthnError('register-device', 'registration', err);
             showAlert('error', err.message || 'Device registration failed.');
         } finally {
-            if (btn) btn.disabled = false;
+            setActionButtonState(btn, false);
         }
     }
 
     async function performAttendanceAction(actionType) {
         const btnId = actionType === 'check-in' ? 'btn-check-in' : 'btn-check-out';
         const btn = document.getElementById(btnId);
-        if (btn) btn.disabled = true;
+        setActionButtonState(btn, true, 'Opening Device Security...');
 
         try {
             const optRes = await fetch("{{ route('attendance.assertion-options') }}");
             const options = await optRes.json();
+            const unavailableMessage = webAuthnUnavailableMessage(options);
+
+            if (unavailableMessage) {
+                await logClientWebAuthnError(actionType, 'browser-support', new Error(unavailableMessage), options);
+                showAlert('error', unavailableMessage);
+                return;
+            }
 
             let payload = {};
 
@@ -433,6 +540,7 @@
 
                     const publicKey = {
                         challenge: base64UrlToUint8Array(options.challenge),
+                        rpId: options.rpId,
                         allowCredentials: allowCreds,
                         userVerification: 'preferred',
                         timeout: options.timeout
@@ -444,25 +552,25 @@
                     try {
                         const fallbackPublicKey = {
                             challenge: base64UrlToUint8Array(options.challenge),
+                            rpId: options.rpId,
                             userVerification: 'preferred',
                             timeout: options.timeout
                         };
                         assertion = await navigator.credentials.get({ publicKey: fallbackPublicKey });
                     } catch (fallbackErr) {
                         console.warn('Fallback assertion failed:', fallbackErr);
+                        await logClientWebAuthnError(actionType, 'assertion', fallbackErr, options);
                         showAlert('error', 'Device verification canceled or failed: ' + (fallbackErr.message || 'Prompt dismissed. You must complete your device passcode/fingerprint to check in.'));
-                        if (btn) btn.disabled = false;
                         return;
                     }
                 }
 
                 payload = {
-                    credential_id: assertion.id,
+                    credential_id: arrayBufferToBase64Url(assertion.rawId),
                     client_data_json: arrayBufferToBase64Url(assertion.response.clientDataJSON)
                 };
             } else {
                 showAlert('error', 'No approved device passkey found on account. Please register your device first or wait for admin approval.');
-                if (btn) btn.disabled = false;
                 return;
             }
 
@@ -485,9 +593,10 @@
             }
         } catch (err) {
             console.error(err);
+            await logClientWebAuthnError(actionType, 'attendance-action', err);
             showAlert('error', err.message || 'Attendance action failed.');
         } finally {
-            if (btn) btn.disabled = false;
+            setActionButtonState(btn, false);
         }
     }
 </script>

@@ -23,6 +23,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/attendance/register-options', [AttendanceController::class, 'getRegisterOptions'])->name('attendance.register-options');
     Route::post('/attendance/register-device', [AttendanceController::class, 'registerDevice'])->name('attendance.register-device');
     Route::get('/attendance/assertion-options', [AttendanceController::class, 'getAssertionOptions'])->name('attendance.assertion-options');
+    Route::post('/attendance/client-error', [AttendanceController::class, 'logClientError'])->name('attendance.client-error');
     Route::post('/attendance/check-in', [AttendanceController::class, 'checkIn'])->name('attendance.check-in');
     Route::post('/attendance/check-out', [AttendanceController::class, 'checkOut'])->name('attendance.check-out');
 

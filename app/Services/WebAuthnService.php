@@ -9,6 +9,17 @@ use Illuminate\Support\Str;
 
 class WebAuthnService
 {
+    protected function relyingPartyId(): string
+    {
+        $configuredHost = parse_url((string) config('app.url'), PHP_URL_HOST);
+
+        if (app()->environment('production') && $configuredHost) {
+            return $configuredHost;
+        }
+
+        return request()->getHost();
+    }
+
     /**
      * Generate registration challenge & options for navigator.credentials.create()
      */
@@ -21,7 +32,7 @@ class WebAuthnService
             'challenge' => self::base64UrlEncode($challenge),
             'rp' => [
                 'name' => 'Staff Attendance',
-                'id' => request()->getHost(),
+                'id' => $this->relyingPartyId(),
             ],
             'user' => [
                 'id' => self::base64UrlEncode((string) $user->id),
@@ -121,6 +132,7 @@ class WebAuthnService
 
         return [
             'challenge' => self::base64UrlEncode($challenge),
+            'rpId' => $this->relyingPartyId(),
             'allowCredentials' => ($activeCredential && $activeCredential->isApproved()) ? [
                 [
                     'type' => 'public-key',
