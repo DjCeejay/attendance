@@ -474,13 +474,43 @@ class AdminAttendanceController extends Controller
         return back()->with('success', 'Previous device credential invalidated. Staff member can now register a new device.');
     }
 
-    public function networks()
+    public function networks(Request $request)
     {
         $this->authorizeAdmin();
 
         $networks = AttendanceNetwork::orderBy('created_at', 'desc')->get();
+        $currentIp = AttendanceController::resolveClientIp($request);
 
-        return view('admin.attendance.networks', compact('networks'));
+        return view('admin.attendance.networks', compact('networks', 'currentIp'));
+    }
+
+    public function syncCurrentIp(Request $request)
+    {
+        $this->authorizeAdmin();
+
+        $clientIp = AttendanceController::resolveClientIp($request);
+        if (!$clientIp) {
+            return back()->with('error', 'Could not resolve client IP.');
+        }
+
+        $network = AttendanceNetwork::first();
+        if (!$network) {
+            $network = AttendanceNetwork::create([
+                'name' => 'HQ Main Office Wi-Fi',
+                'ip_range' => $clientIp . '/32',
+                'enabled' => true,
+                'description' => 'Auto-synced to current admin public IP on ' . Carbon::now()->format('M j, Y g:i A'),
+                'created_by' => Auth::id(),
+            ]);
+        } else {
+            $network->update([
+                'ip_range' => $clientIp . '/32',
+                'enabled' => true,
+                'description' => 'Auto-synced to current admin public IP on ' . Carbon::now()->format('M j, Y g:i A'),
+            ]);
+        }
+
+        return back()->with('success', "Office Network updated to your current public IP ({$clientIp}/32).");
     }
 
     public function storeNetwork(Request $request)

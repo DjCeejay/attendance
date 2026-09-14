@@ -17,6 +17,26 @@
         </button>
     </div>
 
+    <!-- Dynamic IP Quick Sync Banner -->
+    <div class="bg-indigo-900 text-white p-4 rounded-2xl shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div class="space-y-1">
+            <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <h3 class="font-extrabold text-xs text-indigo-100 uppercase tracking-wider">Your Current Public IP:</h3>
+                <span class="font-mono font-black text-sm text-white px-2 py-0.5 rounded bg-white/10">{{ $currentIp }}</span>
+            </div>
+            <p class="text-xs text-indigo-200">If your ISP router uses dynamic IP, click <strong>Sync My IP</strong> while connected to Office Wi-Fi, or enter a Dynamic DNS hostname (e.g. <code>office.ddns.net</code>) or ISP Subnet CIDR (e.g. <code>197.210.0.0/16</code>).</p>
+        </div>
+
+        <form method="POST" action="{{ route('admin.attendance.networks.sync-ip') }}" class="shrink-0" onsubmit="return confirm('Update Office Network to your current connected IP ({{ $currentIp }}/32)?');">
+            @csrf
+            <button type="submit" class="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-slate-950 font-black text-xs py-2 px-4 rounded-xl shadow transition flex items-center gap-1.5">
+                <svg class="w-4 h-4 text-slate-950" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                <span>Sync My Current IP</span>
+            </button>
+        </form>
+    </div>
+
     <!-- Networks List -->
     <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div class="px-4 py-3 border-b border-slate-100 font-extrabold text-sm text-slate-900">

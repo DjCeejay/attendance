@@ -30,7 +30,7 @@ class AttendanceNetwork extends Model
     }
 
     /**
-     * Check if a given IP address matches this network's IP range/CIDR.
+     * Check if a given IP address matches this network's IP range/CIDR/Hostname.
      */
     public function matchesIp(string $ip): bool
     {
@@ -45,8 +45,19 @@ class AttendanceNetwork extends Model
                 return true;
             }
 
+            // Direct IP or CIDR match
             if (self::ipMatchesCidr($ip, $range)) {
                 return true;
+            }
+
+            // Hostname / Dynamic DNS (DDNS) resolution match (e.g. office.ddns.net)
+            if (!filter_var($range, FILTER_VALIDATE_IP) && !str_contains($range, '/')) {
+                $resolvedIp = gethostbyname($range);
+                if ($resolvedIp !== $range && filter_var($resolvedIp, FILTER_VALIDATE_IP)) {
+                    if (self::ipMatchesCidr($ip, $resolvedIp)) {
+                        return true;
+                    }
+                }
             }
         }
 
