@@ -378,6 +378,52 @@
         }
     }
 
+    function timeoutError(message) {
+        const err = new Error(message);
+        err.name = 'TimeoutError';
+        return err;
+    }
+
+    async function withTimeout(promise, ms, message) {
+        let timeoutId;
+        const timeout = new Promise((_, reject) => {
+            timeoutId = window.setTimeout(() => reject(timeoutError(message)), ms);
+        });
+
+        try {
+            return await Promise.race([promise, timeout]);
+        } finally {
+            window.clearTimeout(timeoutId);
+        }
+    }
+
+    async function fetchJsonWithTimeout(url, options = {}, ms = 12000) {
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(() => controller.abort(), ms);
+
+        try {
+            const response = await fetch(url, {
+                credentials: 'same-origin',
+                ...options,
+                signal: controller.signal
+            });
+
+            if (!response.ok) {
+                throw new Error('Server returned ' + response.status + ' while preparing attendance verification.');
+            }
+
+            return await response.json();
+        } catch (err) {
+            if (err.name === 'AbortError') {
+                throw timeoutError('The attendance server did not respond in time. Please check the connection and try again.');
+            }
+
+            throw err;
+        } finally {
+            window.clearTimeout(timeoutId);
+        }
+    }
+
     function webAuthnUnavailableMessage(options = {}) {
         if (!window.isSecureContext) {
             return 'Device verification requires HTTPS. Please open the secure attendance link.';
@@ -448,8 +494,7 @@
         setActionButtonState(btn, true, 'Opening Device Security...');
 
         try {
-            const optRes = await fetch("{{ route('attendance.register-options') }}");
-            const options = await optRes.json();
+            const options = await fetchJsonWithTimeout("{{ route('attendance.register-options') }}");
             const unavailableMessage = webAuthnUnavailableMessage({ rpId: options.rp?.id });
 
             if (unavailableMessage) {
@@ -473,7 +518,11 @@
                     timeout: options.timeout
                 };
 
-                const rawCredential = await navigator.credentials.create({ publicKey });
+                const rawCredential = await withTimeout(
+                    navigator.credentials.create({ publicKey }),
+                    30000,
+                    'The phone did not open device security. Please open the app in Chrome, unlock the phone, and try again.'
+                );
                 credential = {
                     credential_id: arrayBufferToBase64Url(rawCredential.rawId),
                     raw_id: arrayBufferToBase64Url(rawCredential.rawId),
@@ -493,6 +542,7 @@
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': '{{ csrf_token() }}'
                 },
+                credentials: 'same-origin',
                 body: JSON.stringify(credential)
             });
 
@@ -518,8 +568,7 @@
         setActionButtonState(btn, true, 'Opening Device Security...');
 
         try {
-            const optRes = await fetch("{{ route('attendance.assertion-options') }}");
-            const options = await optRes.json();
+            const options = await fetchJsonWithTimeout("{{ route('attendance.assertion-options') }}");
             const unavailableMessage = webAuthnUnavailableMessage(options);
 
             if (unavailableMessage) {
@@ -528,51 +577,47 @@
                 return;
             }
 
-            let payload = {};
-
-            if (window.PublicKeyCredential && options.allowCredentials && options.allowCredentials.length > 0) {
-                let assertion;
-                try {
-                    const allowCreds = options.allowCredentials.map(c => ({
-                        type: c.type,
-                        id: base64UrlToUint8Array(c.id)
-                    }));
-
-                    const publicKey = {
-                        challenge: base64UrlToUint8Array(options.challenge),
-                        rpId: options.rpId,
-                        allowCredentials: allowCreds,
-                        userVerification: 'preferred',
-                        timeout: options.timeout
-                    };
-
-                    assertion = await navigator.credentials.get({ publicKey });
-                } catch (credErr) {
-                    console.warn('Primary assertion attempt failed, attempting fallback:', credErr);
-                    try {
-                        const fallbackPublicKey = {
-                            challenge: base64UrlToUint8Array(options.challenge),
-                            rpId: options.rpId,
-                            userVerification: 'preferred',
-                            timeout: options.timeout
-                        };
-                        assertion = await navigator.credentials.get({ publicKey: fallbackPublicKey });
-                    } catch (fallbackErr) {
-                        console.warn('Fallback assertion failed:', fallbackErr);
-                        await logClientWebAuthnError(actionType, 'assertion', fallbackErr, options);
-                        showAlert('error', 'Device verification canceled or failed: ' + (fallbackErr.message || 'Prompt dismissed. You must complete your device passcode/fingerprint to check in.'));
-                        return;
-                    }
-                }
-
-                payload = {
-                    credential_id: arrayBufferToBase64Url(assertion.rawId),
-                    client_data_json: arrayBufferToBase64Url(assertion.response.clientDataJSON)
-                };
-            } else {
+            if (!window.PublicKeyCredential || !options.challenge) {
                 showAlert('error', 'No approved device passkey found on account. Please register your device first or wait for admin approval.');
                 return;
             }
+
+            let assertion;
+            try {
+                // Do NOT pass allowCredentials — Android platform authenticator
+                // freezes when the stored credential ID bytes don't match exactly.
+                // Instead, let the OS passkey picker show all available passkeys for
+                // this site (discoverable credentials), then verify the returned ID
+                // on the backend.
+                const publicKey = {
+                    challenge: base64UrlToUint8Array(options.challenge),
+                    rpId: options.rpId,
+                    userVerification: 'preferred',
+                    timeout: 60000
+                };
+
+                assertion = await withTimeout(
+                    navigator.credentials.get({ publicKey }),
+                    65000,
+                    'The device security prompt timed out. Please try again.'
+                );
+            } catch (credErr) {
+                console.warn('WebAuthn prompt failed:', credErr);
+                await logClientWebAuthnError(actionType, 'assertion', credErr, options);
+                if (credErr.name === 'NotAllowedError') {
+                    showAlert('error', 'Device verification was canceled or timed out. Please tap Check In again and complete the biometric/PIN prompt.');
+                } else if (credErr.name === 'InvalidStateError') {
+                    showAlert('error', 'Passkey not found on this device. Try re-registering your device.');
+                } else {
+                    showAlert('error', 'Device verification failed: ' + (credErr.message || 'Please try again.'));
+                }
+                return;
+            }
+
+            const payload = {
+                credential_id: arrayBufferToBase64Url(assertion.rawId),
+                client_data_json: arrayBufferToBase64Url(assertion.response.clientDataJSON)
+            };
 
             const url = actionType === 'check-in' ? "{{ route('attendance.check-in') }}" : "{{ route('attendance.check-out') }}";
             const response = await fetch(url, {
@@ -581,6 +626,7 @@
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': '{{ csrf_token() }}'
                 },
+                credentials: 'same-origin',
                 body: JSON.stringify(payload)
             });
 

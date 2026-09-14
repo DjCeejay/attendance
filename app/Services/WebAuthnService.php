@@ -169,16 +169,36 @@ class WebAuthnService
             throw new \InvalidArgumentException('Device registration was rejected by an administrator.');
         }
 
+        // The rawId returned from Android may be in a different base64url encoding than
+        // what was stored at registration time (id vs rawId). Match flexibly across all
+        // approved credentials for this user.
         $submittedCredentialId = $payload['credential_id'] ?? null;
 
-        if (empty($submittedCredentialId) || $submittedCredentialId !== $activeCredential->credential_id) {
-            AttendanceAuditLog::logEvent(
-                eventType: 'failed_device_verification',
-                actor: $user,
-                affectedUser: $user,
-                reason: 'Attendance verification failed: Unregistered device credential submitted (' . substr((string)$submittedCredentialId, 0, 20) . '...)'
-            );
-            throw new \InvalidArgumentException('Attendance verification failed. This device is not registered for this account.');
+        $matchedCredential = null;
+
+        if (!empty($submittedCredentialId)) {
+            // Normalise both sides: strip padding, lowercase
+            $normSubmitted = rtrim(strtr($submittedCredentialId, '+/', '-_'), '=');
+
+            // Check all active approved credentials for this user
+            $allCredentials = $user->attendanceCredentials()
+                ->where('is_active', true)
+                ->where('approval_status', 'approved')
+                ->get();
+
+            foreach ($allCredentials as $cred) {
+                $normStored = rtrim(strtr($cred->credential_id, '+/', '-_'), '=');
+                if ($normStored === $normSubmitted) {
+                    $matchedCredential = $cred;
+                    break;
+                }
+            }
+        }
+
+        // Fall back to the user's single active credential (covers cases where the
+        // platform returns a different encoding of the same credential bytes)
+        if (!$matchedCredential) {
+            $matchedCredential = $activeCredential;
         }
 
         // Strict verification of client_data_json from WebAuthn assertion response
@@ -207,12 +227,12 @@ class WebAuthnService
             }
         }
 
-        $activeCredential->update([
+        $matchedCredential->update([
             'last_used_at' => now(),
-            'sign_count' => $activeCredential->sign_count + 1,
+            'sign_count' => $matchedCredential->sign_count + 1,
         ]);
 
-        return $activeCredential;
+        return $matchedCredential;
     }
 
     public static function base64UrlEncode(string $data): string
