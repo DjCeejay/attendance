@@ -327,6 +327,8 @@
         }
 
         alertBox.innerText = message;
+        alertBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (navigator.vibrate) navigator.vibrate(200);
     }
 
     function arrayBufferToBase64Url(buffer) {
@@ -336,6 +338,18 @@
             binary += String.fromCharCode(bytes[i]);
         }
         return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
+    function base64UrlToUint8Array(base64UrlString) {
+        if (!base64UrlString) return new Uint8Array();
+        let padding = '='.repeat((4 - (base64UrlString.length % 4)) % 4);
+        let base64 = (base64UrlString + padding).replace(/-/g, '+').replace(/_/g, '/');
+        let rawData = atob(base64);
+        let outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) {
+            outputArray[i] = rawData.charCodeAt(i);
+        }
+        return outputArray;
     }
 
     async function registerDevice() {
@@ -349,10 +363,10 @@
             let credential;
             if (window.PublicKeyCredential) {
                 const publicKey = {
-                    challenge: Uint8Array.from(atob(options.challenge.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)),
+                    challenge: base64UrlToUint8Array(options.challenge),
                     rp: options.rp,
                     user: {
-                        id: Uint8Array.from(atob(options.user.id.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)),
+                        id: base64UrlToUint8Array(options.user.id),
                         name: options.user.name,
                         displayName: options.user.displayName
                     },
@@ -366,10 +380,10 @@
                     credential_id: rawCredential.id,
                     client_data_json: arrayBufferToBase64Url(rawCredential.response.clientDataJSON),
                     public_key: rawCredential.id,
-                    device_name: 'Registered Device (' + navigator.userAgent.split(')')[0].split('(')[1] + ')'
+                    device_name: 'Registered Device (' + (navigator.userAgent.includes('(') ? navigator.userAgent.split(')')[0].split('(')[1] : 'Android') + ')'
                 };
             } else {
-                showAlert('error', 'WebAuthn passkeys are unsupported on this device.');
+                showAlert('error', 'WebAuthn passkeys are unsupported on this device or browser.');
                 if (btn) btn.disabled = false;
                 return;
             }
@@ -413,11 +427,11 @@
                 try {
                     const allowCreds = options.allowCredentials.map(c => ({
                         type: c.type,
-                        id: Uint8Array.from(atob(c.id.replace(/-/g, '+').replace(/_/g, '/')), char => char.charCodeAt(0))
+                        id: base64UrlToUint8Array(c.id)
                     }));
 
                     const publicKey = {
-                        challenge: Uint8Array.from(atob(options.challenge.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)),
+                        challenge: base64UrlToUint8Array(options.challenge),
                         allowCredentials: allowCreds,
                         userVerification: 'required',
                         timeout: options.timeout
@@ -430,7 +444,7 @@
                     };
                 } catch (credErr) {
                     console.warn('WebAuthn prompt canceled/failed:', credErr);
-                    showAlert('error', 'Device verification canceled or failed. You must input your device password/fingerprint to check in.');
+                    showAlert('error', 'Device verification canceled or failed: ' + (credErr.message || 'Prompt dismissed. You must complete your device passcode/fingerprint to check in.'));
                     if (btn) btn.disabled = false;
                     return;
                 }
