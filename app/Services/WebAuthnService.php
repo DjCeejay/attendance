@@ -33,7 +33,7 @@ class WebAuthnService
                 ['type' => 'public-key', 'alg' => -257], // RS256
             ],
             'authenticatorSelection' => [
-                'userVerification' => 'required',
+                'userVerification' => 'preferred',
             ],
             'timeout' => 60000,
         ];
@@ -121,13 +121,13 @@ class WebAuthnService
 
         return [
             'challenge' => self::base64UrlEncode($challenge),
-            'allowCredentials' => $activeCredential ? [
+            'allowCredentials' => ($activeCredential && $activeCredential->isApproved()) ? [
                 [
                     'type' => 'public-key',
                     'id' => $activeCredential->credential_id,
                 ],
             ] : [],
-            'userVerification' => 'required',
+            'userVerification' => 'preferred',
             'timeout' => 60000,
         ];
     }

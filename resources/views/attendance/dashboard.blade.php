@@ -424,6 +424,7 @@
             let payload = {};
 
             if (window.PublicKeyCredential && options.allowCredentials && options.allowCredentials.length > 0) {
+                let assertion;
                 try {
                     const allowCreds = options.allowCredentials.map(c => ({
                         type: c.type,
@@ -433,23 +434,34 @@
                     const publicKey = {
                         challenge: base64UrlToUint8Array(options.challenge),
                         allowCredentials: allowCreds,
-                        userVerification: 'required',
+                        userVerification: 'preferred',
                         timeout: options.timeout
                     };
 
-                    const assertion = await navigator.credentials.get({ publicKey });
-                    payload = {
-                        credential_id: assertion.id,
-                        client_data_json: arrayBufferToBase64Url(assertion.response.clientDataJSON)
-                    };
+                    assertion = await navigator.credentials.get({ publicKey });
                 } catch (credErr) {
-                    console.warn('WebAuthn prompt canceled/failed:', credErr);
-                    showAlert('error', 'Device verification canceled or failed: ' + (credErr.message || 'Prompt dismissed. You must complete your device passcode/fingerprint to check in.'));
-                    if (btn) btn.disabled = false;
-                    return;
+                    console.warn('Primary assertion attempt failed, attempting fallback:', credErr);
+                    try {
+                        const fallbackPublicKey = {
+                            challenge: base64UrlToUint8Array(options.challenge),
+                            userVerification: 'preferred',
+                            timeout: options.timeout
+                        };
+                        assertion = await navigator.credentials.get({ publicKey: fallbackPublicKey });
+                    } catch (fallbackErr) {
+                        console.warn('Fallback assertion failed:', fallbackErr);
+                        showAlert('error', 'Device verification canceled or failed: ' + (fallbackErr.message || 'Prompt dismissed. You must complete your device passcode/fingerprint to check in.'));
+                        if (btn) btn.disabled = false;
+                        return;
+                    }
                 }
+
+                payload = {
+                    credential_id: assertion.id,
+                    client_data_json: arrayBufferToBase64Url(assertion.response.clientDataJSON)
+                };
             } else {
-                showAlert('error', 'No registered device passkey found on account. Please register your device first.');
+                showAlert('error', 'No approved device passkey found on account. Please register your device first or wait for admin approval.');
                 if (btn) btn.disabled = false;
                 return;
             }
