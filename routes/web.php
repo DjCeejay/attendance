@@ -40,6 +40,7 @@ Route::middleware(['auth'])->group(function () {
 
         // Record Corrections
         Route::post('/correct/{record}', [AdminAttendance::class, 'correctRecord'])->name('correct');
+        Route::delete('/records/{record}', [AdminAttendance::class, 'destroyRecord'])->name('records.destroy');
         Route::post('/fix-today-timestamps', [AdminAttendance::class, 'fixTodayWatTimestamps'])->name('fix-today-timestamps');
         Route::post('/manual-record', [AdminAttendance::class, 'storeManualRecord'])->name('manual-record');
         Route::post('/deactivate-credential/{credential}', [AdminAttendance::class, 'deactivateCredential'])->name('deactivate-credential');

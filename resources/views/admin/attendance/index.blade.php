@@ -240,6 +240,11 @@
                             <td class="p-3.5 text-right space-x-2">
                                 <a href="{{ route('admin.attendance.user-history', $rec->user) }}" class="text-xs font-bold text-indigo-600 hover:text-indigo-800">History</a>
                                 <button type="button" onclick="openCorrectionModal({{ $rec->id }}, '{{ $rec->user->name }}', '{{ $rec->status }}', '{{ $rec->check_in_at ? $rec->check_in_at->format('Y-m-d\TH:i') : '' }}', '{{ $rec->check_out_at ? $rec->check_out_at->format('Y-m-d\TH:i') : '' }}', '{{ addslashes($rec->notes ?? '') }}')" class="text-xs font-bold text-slate-600 hover:text-slate-900 border border-slate-300 px-2 py-1 rounded">Correct</button>
+                                <form method="POST" action="{{ route('admin.attendance.records.destroy', $rec) }}" onsubmit="return confirm('Delete this attendance record for {{ addslashes($rec->user->name) }}?');" class="inline">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="text-xs font-bold text-rose-600 hover:text-rose-800">Delete</button>
+                                </form>
                             </td>
                         </tr>
                     @empty

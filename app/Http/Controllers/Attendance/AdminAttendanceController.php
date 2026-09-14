@@ -327,6 +327,26 @@ class AdminAttendanceController extends Controller
         return back()->with('success', 'Attendance record updated cleanly and change audited.');
     }
 
+    public function destroyRecord(AttendanceRecord $record)
+    {
+        $this->authorizeAdmin();
+
+        $actor = Auth::user();
+        $user = $record->user;
+        $dateStr = $record->attendance_date->toDateString();
+
+        AttendanceAuditLog::logEvent(
+            eventType: 'manual_deletion',
+            actor: $actor,
+            affectedUser: $user,
+            reason: "Attendance record for {$user->name} on {$dateStr} deleted by administrator."
+        );
+
+        $record->delete();
+
+        return back()->with('success', "Attendance record for {$user->name} on {$dateStr} deleted successfully.");
+    }
+
     public function fixTodayWatTimestamps(Request $request)
     {
         $this->authorizeAdmin();
