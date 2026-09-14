@@ -12,7 +12,16 @@
             <p class="text-xs text-slate-500">Monitor daily office attendance, pending staff approvals, and device passkeys</p>
         </div>
 
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-3">
+            <form method="POST" action="{{ route('admin.attendance.fix-today-timestamps') }}" class="inline" onsubmit="return confirm('Shift today\'s check-in timestamps to WAT (+1 hr) and recalculate late status?');">
+                @csrf
+                <input type="hidden" name="date" value="{{ $selectedDate }}">
+                <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs py-2 px-3 rounded-xl shadow flex items-center gap-1.5" title="Fix check-in timestamps recorded before timezone adjustment">
+                    <svg class="w-4 h-4 text-amber-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span>Fix WAT Timestamps</span>
+                </button>
+            </form>
+
             <a href="{{ route('admin.attendance.analytics') }}" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2 px-3.5 rounded-xl shadow flex items-center gap-1.5">
                 <svg class="w-4 h-4 text-indigo-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                 <span>View Staff Analytics</span>

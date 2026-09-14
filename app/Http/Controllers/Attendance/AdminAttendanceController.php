@@ -327,6 +327,63 @@ class AdminAttendanceController extends Controller
         return back()->with('success', 'Attendance record updated cleanly and change audited.');
     }
 
+    public function fixTodayWatTimestamps(Request $request)
+    {
+        $this->authorizeAdmin();
+
+        $tz = AttendanceSetting::get('timezone', config('app.timezone', 'Africa/Lagos'));
+        $dateStr = $request->input('date', Carbon::today($tz)->toDateString());
+        $hoursToAdd = (int) $request->input('hours', 1);
+
+        $expectedTimeStr = AttendanceSetting::get('expected_arrival_time', '09:00');
+        $lateThreshold = (int) AttendanceSetting::get('late_threshold_minutes', 15);
+
+        $records = AttendanceRecord::whereDate('attendance_date', $dateStr)->get();
+
+        if ($records->isEmpty()) {
+            return back()->with('error', "No attendance records found for {$dateStr}.");
+        }
+
+        $actor = Auth::user();
+        $count = 0;
+
+        foreach ($records as $record) {
+            if (!$record->check_in_at) {
+                continue;
+            }
+
+            $newCheckIn = Carbon::parse($record->check_in_at)->addHours($hoursToAdd);
+            $expectedArrival = Carbon::createFromFormat('Y-m-d H:i', $dateStr . ' ' . $expectedTimeStr, $tz);
+            $lateDeadline = (clone $expectedArrival)->addMinutes($lateThreshold);
+
+            $newStatus = $newCheckIn->greaterThan($lateDeadline) ? 'late' : 'present';
+
+            $record->check_in_at = $newCheckIn;
+            $record->status = $newStatus;
+
+            if ($record->check_out_at) {
+                $record->check_out_at = Carbon::parse($record->check_out_at)->addHours($hoursToAdd);
+            }
+
+            $record->save();
+            $count++;
+
+            AttendanceAuditLog::logEvent(
+                eventType: 'manual_correction',
+                actor: $actor,
+                affectedUser: $record->user,
+                record: $record,
+                newValues: [
+                    'check_in_at' => $newCheckIn->toIso8601String(),
+                    'status' => $newStatus,
+                ],
+                reason: "Admin WAT Shift (+{$hoursToAdd} hr): Recalculated check-in to WAT and re-evaluated late status."
+            );
+        }
+
+        return back()->with('success', "Successfully updated {$count} check-in record(s) for {$dateStr} to WAT and re-evaluated late status.");
+    }
+
     public function storeManualRecord(Request $request)
     {
         $this->authorizeAdmin();
