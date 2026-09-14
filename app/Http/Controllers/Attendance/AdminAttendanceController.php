@@ -30,8 +30,9 @@ class AdminAttendanceController extends Controller
         $this->authorizeAdmin();
         $this->autoCheckoutForgottenRecords();
 
-        $selectedDate = $request->input('date', Carbon::today()->toDateString());
-        $date = Carbon::parse($selectedDate);
+        $tz = AttendanceSetting::get('timezone', config('app.timezone', 'UTC'));
+        $selectedDate = $request->input('date', Carbon::today($tz)->toDateString());
+        $date = Carbon::parse($selectedDate, $tz);
 
         $selectedUser = $request->input('user_id');
         $selectedStatus = $request->input('status');
@@ -543,7 +544,9 @@ class AdminAttendanceController extends Controller
             return;
         }
 
+        $tz       = AttendanceSetting::get('timezone', config('app.timezone', 'UTC'));
         $autoTime = AttendanceSetting::get('auto_checkout_time', '17:00');
+        $nowTz    = Carbon::now($tz);
 
         $unclosedRecords = AttendanceRecord::whereNotNull('check_in_at')
             ->whereNull('check_out_at')
@@ -551,20 +554,25 @@ class AdminAttendanceController extends Controller
 
         foreach ($unclosedRecords as $rec) {
             $recDate = $rec->attendance_date;
-            $autoCheckoutDateTime = Carbon::parse($recDate->toDateString() . ' ' . $autoTime);
+            // Build the auto-checkout moment in the correct local timezone
+            $autoCheckoutDateTime = Carbon::createFromFormat(
+                'Y-m-d H:i',
+                $recDate->toDateString() . ' ' . $autoTime,
+                $tz
+            );
 
-            if (Carbon::now()->greaterThanOrEqualTo($autoCheckoutDateTime)) {
+            if ($nowTz->greaterThanOrEqualTo($autoCheckoutDateTime)) {
                 $rec->update([
                     'check_out_at' => $autoCheckoutDateTime,
-                    'notes' => trim(($rec->notes ? $rec->notes . ' | ' : '') . 'System Auto Check-Out (Forgotten Check-Out)'),
+                    'notes'        => trim(($rec->notes ? $rec->notes . ' | ' : '') . 'System Auto Check-Out (Forgotten Check-Out)'),
                 ]);
 
                 AttendanceAuditLog::logEvent(
-                    eventType: 'auto_checkout',
-                    actor: null,
+                    eventType:    'auto_checkout',
+                    actor:        null,
                     affectedUser: $rec->user,
-                    record: $rec,
-                    reason: 'Automatic Auto Check-Out triggered for forgotten check-out'
+                    record:       $rec,
+                    reason:       'Automatic Auto Check-Out triggered for forgotten check-out'
                 );
             }
         }

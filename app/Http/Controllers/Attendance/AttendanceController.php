@@ -8,7 +8,6 @@ use App\Models\AttendanceCredential;
 use App\Models\AttendanceNetwork;
 use App\Models\AttendanceRecord;
 use App\Models\AttendanceSetting;
-use App\Models\User;
 use App\Services\WebAuthnService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -23,6 +22,33 @@ class AttendanceController extends Controller
         $this->webAuthnService = $webAuthnService;
     }
 
+    /**
+     * Return the configured timezone (from DB settings), defaulting to UTC.
+     */
+    protected static function appTz(): string
+    {
+        return AttendanceSetting::get('timezone', config('app.timezone', 'Africa/Lagos'));
+    }
+
+    /**
+     * Return Carbon::now() in the configured attendance timezone.
+     */
+    protected static function nowTz(): Carbon
+    {
+        return Carbon::now(self::appTz());
+    }
+
+    /**
+     * Return Carbon::today() in the configured attendance timezone.
+     */
+    protected static function todayTz(): Carbon
+    {
+        return Carbon::today(self::appTz());
+    }
+
+    /**
+     * Proxy-aware real client IP resolution (handles Railway / Cloudflare).
+     */
     public static function resolveClientIp(Request $request): string
     {
         $xForwardedFor = $request->header('x-forwarded-for');
@@ -43,45 +69,46 @@ class AttendanceController extends Controller
 
     public function dashboard(Request $request)
     {
-        /** @var User $user */
+        /** @var \App\Models\User $user */
         $user = Auth::user();
-        $today = Carbon::today();
+        $tz   = self::appTz();
+        $today = self::todayTz();
 
         $record = AttendanceRecord::where('user_id', $user->id)
-            ->whereDate('attendance_date', $today)
+            ->whereDate('attendance_date', $today->toDateString())
             ->first();
 
         $hasRegisteredDevice = $user->hasActiveAttendanceCredential();
-        $activeCredential = $user->activeAttendanceCredential;
+        $activeCredential    = $user->activeAttendanceCredential;
 
-        // Check office network using proxy-aware IP resolution
-        $clientIp = self::resolveClientIp($request);
+        // Network verification
+        $clientIp       = self::resolveClientIp($request);
         $enabledNetworks = AttendanceNetwork::where('enabled', true)->get();
 
         $isNetworkVerified = false;
-        $matchedNetwork = null;
+        $matchedNetwork    = null;
 
         if ($enabledNetworks->isEmpty()) {
-            // Default fallback if no network explicitly defined
             $isNetworkVerified = true;
         } else {
             foreach ($enabledNetworks as $network) {
                 if ($network->matchesIp($clientIp)) {
                     $isNetworkVerified = true;
-                    $matchedNetwork = $network;
+                    $matchedNetwork    = $network;
                     break;
                 }
             }
         }
 
         $attendanceEnabled = AttendanceSetting::get('attendance_enabled', true);
-        $expectedArrival = AttendanceSetting::get('expected_arrival_time', '09:00');
-        $checkInStart = AttendanceSetting::get('check_in_start_time', '07:00');
-        $checkInClosing = AttendanceSetting::get('check_in_closing_time', '12:00');
+        $expectedArrival   = AttendanceSetting::get('expected_arrival_time', '09:00');
+        $checkInStart      = AttendanceSetting::get('check_in_start_time', '07:00');
+        $checkInClosing    = AttendanceSetting::get('check_in_closing_time', '12:00');
 
         return view('attendance.dashboard', compact(
             'user',
             'today',
+            'tz',
             'record',
             'hasRegisteredDevice',
             'activeCredential',
@@ -108,16 +135,16 @@ class AttendanceController extends Controller
 
         $request->validate([
             'credential_id' => ['required', 'string'],
-            'public_key' => ['nullable', 'string'],
-            'device_name' => ['nullable', 'string', 'max:255'],
+            'public_key'    => ['nullable', 'string'],
+            'device_name'   => ['nullable', 'string', 'max:255'],
         ]);
 
         try {
             $credential = $this->webAuthnService->registerCredential($user, $request->all());
 
             return response()->json([
-                'success' => true,
-                'message' => 'Device registration submitted successfully. Please wait for an administrator to approve your device passkey.',
+                'success'    => true,
+                'message'    => 'Device registration submitted successfully. Please wait for an administrator to approve your device passkey.',
                 'credential' => $credential,
             ]);
         } catch (\InvalidArgumentException $e) {
@@ -130,17 +157,19 @@ class AttendanceController extends Controller
 
     public function getAssertionOptions()
     {
-        $user = Auth::user();
+        $user    = Auth::user();
         $options = $this->webAuthnService->generateAssertionOptions($user);
         return response()->json($options);
     }
 
     public function checkIn(Request $request)
     {
-        $user = Auth::user();
-        $today = Carbon::today();
+        /** @var \App\Models\User $user */
+        $user  = Auth::user();
+        $tz    = self::appTz();
+        $today = self::todayTz();
 
-        // 1. Check if attendance module is globally enabled
+        // 1. Attendance module enabled?
         if (!AttendanceSetting::get('attendance_enabled', true)) {
             return response()->json([
                 'success' => false,
@@ -148,20 +177,21 @@ class AttendanceController extends Controller
             ], 422);
         }
 
-        // 2. Check if already checked in today
+        // 2. Already checked in today?
         $existingRecord = AttendanceRecord::where('user_id', $user->id)
-            ->whereDate('attendance_date', $today)
+            ->whereDate('attendance_date', $today->toDateString())
             ->first();
 
         if ($existingRecord && $existingRecord->check_in_at) {
             return response()->json([
                 'success' => false,
-                'message' => 'You have already checked in for today (' . $existingRecord->check_in_at->format('g:i A') . ').',
+                'message' => 'You have already checked in for today ('
+                    . $existingRecord->check_in_at->setTimezone($tz)->format('g:i A') . ').',
             ], 422);
         }
 
-        // 3. Network Verification
-        $clientIp = self::resolveClientIp($request);
+        // 3. Network verification
+        $clientIp        = self::resolveClientIp($request);
         $enabledNetworks = AttendanceNetwork::where('enabled', true)->get();
         $isNetworkVerified = false;
 
@@ -178,10 +208,10 @@ class AttendanceController extends Controller
 
         if (!$isNetworkVerified) {
             AttendanceAuditLog::logEvent(
-                eventType: 'failed_network_verification',
-                actor: $user,
+                eventType:    'failed_network_verification',
+                actor:        $user,
                 affectedUser: $user,
-                reason: 'Check-in attempt from unapproved network IP: ' . $clientIp
+                reason:       'Check-in attempt from unapproved network IP: ' . $clientIp
             );
 
             return response()->json([
@@ -190,13 +220,13 @@ class AttendanceController extends Controller
             ], 403);
         }
 
-        // 4. WebAuthn Credential Verification
-        $credentialId = $request->input('credential_id');
+        // 4. WebAuthn credential verification
+        $credentialId  = $request->input('credential_id');
         $clientDataJson = $request->input('client_data_json');
 
         try {
             $credential = $this->webAuthnService->verifyAssertion($user, [
-                'credential_id' => $credentialId,
+                'credential_id'   => $credentialId,
                 'client_data_json' => $clientDataJson,
             ]);
         } catch (\InvalidArgumentException $e) {
@@ -206,54 +236,57 @@ class AttendanceController extends Controller
             ], 422);
         }
 
-        // 5. Evaluate Late Status
-        $now = Carbon::now();
+        // 5. Evaluate late status using the LOCAL attendance timezone
+        $now             = self::nowTz();                   // e.g. Africa/Lagos = WAT
         $expectedTimeStr = AttendanceSetting::get('expected_arrival_time', '09:00');
-        $lateThreshold = (int) AttendanceSetting::get('late_threshold_minutes', 15);
+        $lateThreshold   = (int) AttendanceSetting::get('late_threshold_minutes', 15);
 
-        $expectedArrival = Carbon::createFromFormat('H:i', $expectedTimeStr)->setDateFrom($now);
-        $lateDeadline = (clone $expectedArrival)->addMinutes($lateThreshold);
+        // Build expected arrival for today in the correct timezone
+        $expectedArrival = Carbon::createFromFormat('Y-m-d H:i', $today->toDateString() . ' ' . $expectedTimeStr, $tz);
+        $lateDeadline    = (clone $expectedArrival)->addMinutes($lateThreshold);
 
         $status = $now->greaterThan($lateDeadline) ? 'late' : 'present';
 
-        // 6. Record attendance
+        // 6. Record attendance (store timestamp in UTC — Laravel converts automatically)
         $record = AttendanceRecord::updateOrCreate(
             ['user_id' => $user->id, 'attendance_date' => $today->toDateString()],
             [
-                'check_in_at' => $now,
-                'status' => $status,
-                'check_in_method' => 'webauthn',
+                'check_in_at'             => $now,  // Carbon with tz → stored in DB as UTC
+                'status'                  => $status,
+                'check_in_method'         => 'webauthn',
                 'check_in_network_verified' => true,
-                'check_in_ip' => $clientIp,
-                'check_in_credential_id' => $credential->id,
+                'check_in_ip'             => $clientIp,
+                'check_in_credential_id'  => $credential->id,
             ]
         );
 
         AttendanceAuditLog::logEvent(
-            eventType: 'check_in',
-            actor: $user,
+            eventType:    'check_in',
+            actor:        $user,
             affectedUser: $user,
-            record: $record,
-            newValues: ['check_in_at' => $now->toIso8601String(), 'status' => $status],
-            reason: 'Check-in via WebAuthn passkey'
+            record:       $record,
+            newValues:    ['check_in_at' => $now->toIso8601String(), 'status' => $status],
+            reason:       'Check-in via WebAuthn passkey'
         );
 
         return response()->json([
-            'success' => true,
-            'message' => 'Check-in successful',
+            'success'       => true,
+            'message'       => 'Check-in successful',
             'check_in_time' => $now->format('g:i A'),
-            'status' => $status,
-            'record' => $record,
+            'status'        => $status,
+            'record'        => $record,
         ]);
     }
 
     public function checkOut(Request $request)
     {
-        $user = Auth::user();
-        $today = Carbon::today();
+        /** @var \App\Models\User $user */
+        $user  = Auth::user();
+        $tz    = self::appTz();
+        $today = self::todayTz();
 
         $record = AttendanceRecord::where('user_id', $user->id)
-            ->whereDate('attendance_date', $today)
+            ->whereDate('attendance_date', $today->toDateString())
             ->first();
 
         if (!$record || !$record->check_in_at) {
@@ -266,12 +299,13 @@ class AttendanceController extends Controller
         if ($record->check_out_at) {
             return response()->json([
                 'success' => false,
-                'message' => 'You have already checked out for today at ' . $record->check_out_at->format('g:i A') . '.',
+                'message' => 'You have already checked out for today at '
+                    . $record->check_out_at->setTimezone($tz)->format('g:i A') . '.',
             ], 422);
         }
 
-        // Network Verification
-        $clientIp = self::resolveClientIp($request);
+        // Network verification
+        $clientIp        = self::resolveClientIp($request);
         $enabledNetworks = AttendanceNetwork::where('enabled', true)->get();
         $isNetworkVerified = false;
 
@@ -288,10 +322,10 @@ class AttendanceController extends Controller
 
         if (!$isNetworkVerified) {
             AttendanceAuditLog::logEvent(
-                eventType: 'failed_network_verification',
-                actor: $user,
+                eventType:    'failed_network_verification',
+                actor:        $user,
                 affectedUser: $user,
-                reason: 'Check-out attempt from unapproved network IP: ' . $clientIp
+                reason:       'Check-out attempt from unapproved network IP: ' . $clientIp
             );
 
             return response()->json([
@@ -300,13 +334,13 @@ class AttendanceController extends Controller
             ], 403);
         }
 
-        // WebAuthn Credential Verification
-        $credentialId = $request->input('credential_id');
+        // WebAuthn verification
+        $credentialId  = $request->input('credential_id');
         $clientDataJson = $request->input('client_data_json');
 
         try {
             $credential = $this->webAuthnService->verifyAssertion($user, [
-                'credential_id' => $credentialId,
+                'credential_id'    => $credentialId,
                 'client_data_json' => $clientDataJson,
             ]);
         } catch (\InvalidArgumentException $e) {
@@ -316,34 +350,34 @@ class AttendanceController extends Controller
             ], 422);
         }
 
-        $now = Carbon::now();
+        $now = self::nowTz();
         $record->update([
-            'check_out_at' => $now,
+            'check_out_at'              => $now,
             'check_out_network_verified' => true,
-            'check_out_ip' => $clientIp,
-            'check_out_credential_id' => $credential->id,
+            'check_out_ip'              => $clientIp,
+            'check_out_credential_id'   => $credential->id,
         ]);
 
         AttendanceAuditLog::logEvent(
-            eventType: 'check_out',
-            actor: $user,
+            eventType:    'check_out',
+            actor:        $user,
             affectedUser: $user,
-            record: $record,
-            newValues: ['check_out_at' => $now->toIso8601String()],
-            reason: 'Check-out via WebAuthn passkey'
+            record:       $record,
+            newValues:    ['check_out_at' => $now->toIso8601String()],
+            reason:       'Check-out via WebAuthn passkey'
         );
 
         return response()->json([
-            'success' => true,
-            'message' => 'Check-out successful',
+            'success'        => true,
+            'message'        => 'Check-out successful',
             'check_out_time' => $now->format('g:i A'),
-            'record' => $record,
+            'record'         => $record,
         ]);
     }
 
     public function history()
     {
-        $user = Auth::user();
+        $user    = Auth::user();
         $records = AttendanceRecord::where('user_id', $user->id)
             ->orderBy('attendance_date', 'desc')
             ->paginate(15);

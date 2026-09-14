@@ -43,7 +43,7 @@
             <div>
                 <h2 class="text-xl sm:text-2xl font-black tracking-tight">
                     @php
-                        $hour = date('H');
+                        $hour = \Carbon\Carbon::now($tz ?? 'Africa/Lagos')->hour;
                         $greeting = $hour < 12 ? 'Good morning' : ($hour < 17 ? 'Good afternoon' : 'Good evening');
                     @endphp
                     {{ $greeting }}, {{ explode(' ', $user->name)[0] }}
@@ -53,7 +53,7 @@
 
             <!-- Live Digital Clock Widget -->
             <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between">
-                <span class="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">Local Time</span>
+                <span class="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">Local Time ({{ $tz ?? 'WAT' }})</span>
                 <span id="live-clock" class="text-lg font-black font-mono tracking-wider text-indigo-300">--:--:-- --</span>
             </div>
         </div>
@@ -172,13 +172,13 @@
             <div class="p-3 bg-slate-50 rounded-2xl border border-slate-100">
                 <span class="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">Check In Time</span>
                 <span class="text-sm font-black text-slate-800 mt-0.5 block">
-                    {{ $record && $record->check_in_at ? $record->check_in_at->format('g:i A') : '--:--' }}
+                    {{ $record && $record->check_in_at ? $record->check_in_at->setTimezone($tz ?? 'Africa/Lagos')->format('g:i A') : '--:--' }}
                 </span>
             </div>
             <div class="p-3 bg-slate-50 rounded-2xl border border-slate-100">
                 <span class="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">Check Out Time</span>
                 <span class="text-sm font-black text-slate-800 mt-0.5 block">
-                    {{ $record && $record->check_out_at ? $record->check_out_at->format('g:i A') : '--:--' }}
+                    {{ $record && $record->check_out_at ? $record->check_out_at->setTimezone($tz ?? 'Africa/Lagos')->format('g:i A') : '--:--' }}
                 </span>
             </div>
         </div>
