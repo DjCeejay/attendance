@@ -44,6 +44,8 @@ class WebAuthnService
                 ['type' => 'public-key', 'alg' => -257], // RS256
             ],
             'authenticatorSelection' => [
+                'authenticatorAttachment' => 'platform',
+                'residentKey' => 'preferred',
                 'userVerification' => 'preferred',
             ],
             'timeout' => 60000,
