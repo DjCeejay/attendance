@@ -63,6 +63,35 @@ class User extends Authenticatable
         return $this->hasMany(AttendanceRecord::class);
     }
 
+    public function staffProfile()
+    {
+        return $this->hasOne(StaffProfile::class);
+    }
+
+    public function getOrCreateStaffProfile(): StaffProfile
+    {
+        $profile = $this->staffProfile()->first();
+        if ($profile) {
+            return $profile;
+        }
+
+        return $this->staffProfile()->create([
+            'base_salary' => 0.00,
+            'off_days' => [0], // Default Sunday off
+            'grace_period_minutes' => 15,
+        ]);
+    }
+
+    public function salaryDeductions()
+    {
+        return $this->hasMany(SalaryDeduction::class);
+    }
+
+    public function payrollArchives()
+    {
+        return $this->hasMany(PayrollArchive::class);
+    }
+
     public function isAdmin(): bool
     {
         return in_array($this->role, ['admin', 'super_admin', 'manager', 'executive'], true);

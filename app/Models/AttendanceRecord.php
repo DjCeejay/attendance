@@ -52,6 +52,11 @@ class AttendanceRecord extends Model
         return $this->belongsTo(AttendanceCredential::class, 'check_out_credential_id');
     }
 
+    public function deduction()
+    {
+        return $this->hasOne(SalaryDeduction::class);
+    }
+
     public function isCheckedIn(): bool
     {
         return !is_null($this->check_in_at) && is_null($this->check_out_at);

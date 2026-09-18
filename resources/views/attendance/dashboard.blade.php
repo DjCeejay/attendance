@@ -88,6 +88,25 @@
         </div>
     </div>
 
+    <!-- Monthly Salary & Balance Widget -->
+    @if(isset($payrollSummary))
+    <div class="bg-gradient-to-r from-slate-900 to-indigo-950 text-white p-4 rounded-2xl shadow-sm flex items-center justify-between gap-4">
+        <div>
+            <div class="text-[10px] font-bold uppercase tracking-wider text-indigo-300">Est. Salary Balance (This Month)</div>
+            <div class="text-xl font-black text-emerald-400 mt-0.5">₦{{ number_format($payrollSummary['net_salary'], 2) }}</div>
+            <div class="text-[10px] text-slate-300 font-medium mt-0.5">
+                Base: ₦{{ number_format($payrollSummary['base_salary']) }}
+                @if($payrollSummary['total_deductions'] > 0)
+                    &bull; <span class="text-rose-400">Deductions: -₦{{ number_format($payrollSummary['total_deductions']) }}</span>
+                @endif
+            </div>
+        </div>
+        <a href="{{ route('staff.payroll.index') }}" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition shrink-0">
+            Statement &rarr;
+        </a>
+    </div>
+    @endif
+
     <!-- Device Pending Admin Approval Notice -->
     @if($activeCredential && $activeCredential->isPending())
     <div class="bg-amber-50 border border-amber-300 p-4 rounded-2xl shadow-sm text-amber-900 flex items-start gap-3">

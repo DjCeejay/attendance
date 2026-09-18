@@ -27,6 +27,24 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/attendance/check-in', [AttendanceController::class, 'checkIn'])->name('attendance.check-in');
     Route::post('/attendance/check-out', [AttendanceController::class, 'checkOut'])->name('attendance.check-out');
 
+    // Staff Payroll Statement
+    Route::get('/staff/payroll', [\App\Http\Controllers\Attendance\StaffPayrollController::class, 'index'])->name('staff.payroll.index');
+
+    // Admin Payroll Management Routes
+    Route::prefix('admin/payroll')->name('admin.payroll.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Attendance\AdminPayrollController::class, 'index'])->name('index');
+        Route::post('/staff/{user}', [\App\Http\Controllers\Attendance\AdminPayrollController::class, 'updateStaffProfile'])->name('staff.update');
+        Route::post('/deductions/{deduction}/waive', [\App\Http\Controllers\Attendance\AdminPayrollController::class, 'waiveDeduction'])->name('deductions.waive');
+        Route::post('/reset', [\App\Http\Controllers\Attendance\AdminPayrollController::class, 'executeReset'])->name('reset');
+    });
+
+    // Admin Shift Template Routes
+    Route::prefix('admin/shifts')->name('admin.shifts.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Attendance\AdminPayrollController::class, 'shiftsIndex'])->name('index');
+        Route::post('/', [\App\Http\Controllers\Attendance\AdminPayrollController::class, 'storeShift'])->name('store');
+        Route::put('/{shift}', [\App\Http\Controllers\Attendance\AdminPayrollController::class, 'updateShift'])->name('update');
+    });
+
     // Admin & Management Routes
     Route::prefix('admin/attendance')->name('admin.attendance.')->group(function () {
         Route::get('/', [AdminAttendance::class, 'index'])->name('index');

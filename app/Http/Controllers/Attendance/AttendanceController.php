@@ -8,6 +8,7 @@ use App\Models\AttendanceCredential;
 use App\Models\AttendanceNetwork;
 use App\Models\AttendanceRecord;
 use App\Models\AttendanceSetting;
+use App\Services\PayrollService;
 use App\Services\WebAuthnService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -16,10 +17,12 @@ use Illuminate\Support\Facades\Auth;
 class AttendanceController extends Controller
 {
     protected WebAuthnService $webAuthnService;
+    protected PayrollService $payrollService;
 
-    public function __construct(WebAuthnService $webAuthnService)
+    public function __construct(WebAuthnService $webAuthnService, PayrollService $payrollService)
     {
         $this->webAuthnService = $webAuthnService;
+        $this->payrollService  = $payrollService;
     }
 
     /**
@@ -106,9 +109,13 @@ class AttendanceController extends Controller
         }
 
         $attendanceEnabled = AttendanceSetting::get('attendance_enabled', true);
-        $expectedArrival   = AttendanceSetting::get('expected_arrival_time', '09:00');
+        $profile           = $user->staffProfile;
+        $expectedArrival   = $profile ? $profile->getExpectedResumptionTime(AttendanceSetting::get('expected_arrival_time', '09:00')) : AttendanceSetting::get('expected_arrival_time', '09:00');
         $checkInStart      = AttendanceSetting::get('check_in_start_time', '07:00');
         $checkInClosing    = AttendanceSetting::get('check_in_closing_time', '12:00');
+
+        $currentPayPeriod  = \App\Services\PayrollService::currentPayPeriod();
+        $payrollSummary    = $this->payrollService->calculateMonthlyBalance($user, $currentPayPeriod);
 
         return response()
             ->view('attendance.dashboard', compact(
@@ -124,7 +131,8 @@ class AttendanceController extends Controller
                 'attendanceEnabled',
                 'expectedArrival',
                 'checkInStart',
-                'checkInClosing'
+                'checkInClosing',
+                'payrollSummary'
             ))
             ->header('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0')
             ->header('Pragma', 'no-cache')
@@ -139,8 +147,11 @@ class AttendanceController extends Controller
 
         $tz = self::appTz();
         $dateStr = $record->attendance_date->toDateString();
-        $expectedTimeStr = AttendanceSetting::get('expected_arrival_time', '09:00');
-        $lateThreshold = (int) AttendanceSetting::get('late_threshold_minutes', 15);
+        $user = $record->user;
+        $profile = $user?->staffProfile;
+
+        $expectedTimeStr = $profile ? $profile->getExpectedResumptionTime(AttendanceSetting::get('expected_arrival_time', '09:00')) : AttendanceSetting::get('expected_arrival_time', '09:00');
+        $lateThreshold   = $profile ? $profile->grace_period_minutes : (int) AttendanceSetting::get('late_threshold_minutes', 15);
 
         // Convert check_in_at to local WAT timezone
         $checkInLocal = Carbon::parse($record->check_in_at)->setTimezone($tz);
@@ -149,7 +160,9 @@ class AttendanceController extends Controller
         $expectedArrival = Carbon::createFromFormat('Y-m-d H:i', $dateStr . ' ' . $expectedTimeStr, $tz);
         $lateDeadline = (clone $expectedArrival)->addMinutes($lateThreshold);
 
-        $expectedStatus = $checkInLocal->greaterThan($lateDeadline) ? 'late' : 'present';
+        $isOffDay = $profile ? $profile->isOffDay($record->attendance_date) : false;
+
+        $expectedStatus = ($isOffDay) ? 'present' : ($checkInLocal->greaterThan($lateDeadline) ? 'late' : 'present');
 
         if ($record->status !== $expectedStatus) {
             $record->update(['status' => $expectedStatus]);
@@ -302,22 +315,24 @@ class AttendanceController extends Controller
             ], 422);
         }
 
-        // 5. Evaluate late status using the LOCAL attendance timezone
-        $now             = self::nowTz();                   // e.g. Africa/Lagos = WAT
-        $expectedTimeStr = AttendanceSetting::get('expected_arrival_time', '09:00');
-        $lateThreshold   = (int) AttendanceSetting::get('late_threshold_minutes', 15);
+        // 5. Evaluate late status using staff profile shift/resumption & off-days
+        $now             = self::nowTz();
+        $profile         = $user->staffProfile;
+        $expectedTimeStr = $profile ? $profile->getExpectedResumptionTime(AttendanceSetting::get('expected_arrival_time', '09:00')) : AttendanceSetting::get('expected_arrival_time', '09:00');
+        $lateThreshold   = $profile ? $profile->grace_period_minutes : (int) AttendanceSetting::get('late_threshold_minutes', 15);
 
         // Build expected arrival for today in the correct timezone
         $expectedArrival = Carbon::createFromFormat('Y-m-d H:i', $today->toDateString() . ' ' . $expectedTimeStr, $tz);
         $lateDeadline    = (clone $expectedArrival)->addMinutes($lateThreshold);
 
-        $status = $now->greaterThan($lateDeadline) ? 'late' : 'present';
+        $isOffDay = $profile ? $profile->isOffDay($today) : false;
+        $status   = ($isOffDay) ? 'present' : ($now->greaterThan($lateDeadline) ? 'late' : 'present');
 
-        // 6. Record attendance (store timestamp in UTC — Laravel converts automatically)
+        // 6. Record attendance
         $record = AttendanceRecord::updateOrCreate(
             ['user_id' => $user->id, 'attendance_date' => $today->toDateString()],
             [
-                'check_in_at'             => $now,  // Carbon with tz → stored in DB as UTC
+                'check_in_at'             => $now,
                 'status'                  => $status,
                 'check_in_method'         => 'webauthn',
                 'check_in_network_verified' => true,
@@ -325,6 +340,11 @@ class AttendanceController extends Controller
                 'check_in_credential_id'  => $credential->id,
             ]
         );
+
+        // 7. Apply lateness penalty if late and not an off-day
+        if ($status === 'late') {
+            $this->payrollService->evaluateAndApplyLatenessPenalty($record, $user);
+        }
 
         AttendanceAuditLog::logEvent(
             eventType:    'check_in',

@@ -1,0 +1,207 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\AttendanceCredential;
+use App\Models\AttendanceNetwork;
+use App\Models\AttendanceRecord;
+use App\Models\PayrollArchive;
+use App\Models\SalaryDeduction;
+use App\Models\Shift;
+use App\Models\User;
+use App\Services\PayrollService;
+use Carbon\Carbon;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+class PayrollAndShiftTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function createAdmin(): User
+    {
+        return User::factory()->create([
+            'role'   => 'admin',
+            'status' => 'approved',
+        ]);
+    }
+
+    protected function createStaff(string $role = 'artsci_staff', float $salary = 150000.00): User
+    {
+        $user = User::factory()->create([
+            'role'   => $role,
+            'status' => 'approved',
+        ]);
+
+        $user->getOrCreateStaffProfile()->update([
+            'base_salary' => $salary,
+            'off_days' => [0], // Sunday off
+            'grace_period_minutes' => 15,
+        ]);
+
+        return $user;
+    }
+
+    protected function registerCredentialForUser(User $user): AttendanceCredential
+    {
+        return AttendanceCredential::create([
+            'user_id' => $user->id,
+            'credential_id' => 'cred_' . $user->id . '_key',
+            'public_key' => 'pubkey_' . $user->id,
+            'device_name' => 'Staff Mobile Device',
+            'is_active' => true,
+            'approval_status' => 'approved',
+        ]);
+    }
+
+    protected function createApprovedNetwork(): AttendanceNetwork
+    {
+        return AttendanceNetwork::create([
+            'name' => 'Office Network',
+            'ip_range' => '127.0.0.1/32',
+            'enabled' => true,
+        ]);
+    }
+
+    /** 1. Off-day check-in does not trigger lateness penalty */
+    public function test_off_day_check_in_does_not_incur_lateness_penalty(): void
+    {
+        $staff = $this->createStaff();
+        // Set Sunday (0) as off day
+        $staff->getOrCreateStaffProfile()->update(['off_days' => [0]]);
+
+        // Mock Sunday date
+        Carbon::setTestNow(Carbon::parse('2026-09-20 11:00:00', 'Africa/Lagos')); // Sunday 11am
+
+        $record = AttendanceRecord::create([
+            'user_id' => $staff->id,
+            'attendance_date' => '2026-09-20',
+            'check_in_at' => now(),
+            'status' => 'present',
+        ]);
+
+        $payrollService = new PayrollService();
+        $deduction = $payrollService->evaluateAndApplyLatenessPenalty($record, $staff);
+
+        $this->assertNull($deduction);
+        $this->assertDatabaseMissing('salary_deductions', ['attendance_record_id' => $record->id]);
+    }
+
+    /** 2. Late check-in on working day automatically logs ₦500 deduction */
+    public function test_late_check_in_logs_lateness_deduction(): void
+    {
+        $staff = $this->createStaff('artsci_staff', 150000.00);
+        $this->createApprovedNetwork();
+        $this->registerCredentialForUser($staff);
+
+        // Monday 10:30 AM (expected resumption 08:00 AM + 15 mins)
+        Carbon::setTestNow(Carbon::parse('2026-09-21 10:30:00', 'Africa/Lagos'));
+
+        $challenge = 'test_challenge_123';
+        session(['webauthn_challenge' => $challenge]);
+        $clientDataJson = \App\Services\WebAuthnService::base64UrlEncode(json_encode([
+            'challenge' => \App\Services\WebAuthnService::base64UrlEncode($challenge)
+        ]));
+
+        $response = $this->actingAs($staff)
+            ->withServerVariables(['REMOTE_ADDR' => '127.0.0.1'])
+            ->postJson(route('attendance.check-in'), [
+                'credential_id' => 'cred_' . $staff->id . '_key',
+                'client_data_json' => $clientDataJson,
+            ]);
+
+        $response->assertStatus(200);
+        $response->assertJson(['status' => 'late']);
+
+        $this->assertDatabaseHas('salary_deductions', [
+            'user_id' => $staff->id,
+            'amount' => 500.00,
+            'status' => 'active',
+            'pay_period' => '2026-09',
+        ]);
+    }
+
+    /** 3. Admin can waive penalty and restore net balance */
+    public function test_admin_can_waive_lateness_penalty(): void
+    {
+        $admin = $this->createAdmin();
+        $staff = $this->createStaff('afc_staff', 150000.00);
+
+        $deduction = SalaryDeduction::create([
+            'user_id' => $staff->id,
+            'pay_period' => '2026-09',
+            'amount' => 500.00,
+            'status' => 'active',
+            'reason' => 'Late check-in',
+        ]);
+
+        $payrollService = new PayrollService();
+        $balanceBefore = $payrollService->calculateMonthlyBalance($staff, '2026-09');
+        $this->assertEquals(149500.00, $balanceBefore['net_salary']);
+
+        $response = $this->actingAs($admin)
+            ->post(route('admin.payroll.deductions.waive', $deduction), [
+                'waiver_reason' => 'Approved official duty',
+            ]);
+
+        $response->assertRedirect();
+
+        $deduction->refresh();
+        $this->assertEquals('waived', $deduction->status);
+        $this->assertEquals('Approved official duty', $deduction->waiver_reason);
+
+        $balanceAfter = $payrollService->calculateMonthlyBalance($staff, '2026-09');
+        $this->assertEquals(150000.00, $balanceAfter['net_salary']);
+    }
+
+    /** 4. Monthly payroll reset archives period and resets deductions */
+    public function test_monthly_payroll_reset_archives_period(): void
+    {
+        $admin = $this->createAdmin();
+        $staff = $this->createStaff('artsci_staff', 200000.00);
+
+        SalaryDeduction::create([
+            'user_id' => $staff->id,
+            'pay_period' => '2026-09',
+            'amount' => 500.00,
+            'status' => 'active',
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->post(route('admin.payroll.reset'), [
+                'pay_period' => '2026-09',
+            ]);
+
+        $response->assertRedirect();
+
+        $this->assertDatabaseHas('payroll_archives', [
+            'user_id' => $staff->id,
+            'pay_period' => '2026-09',
+            'base_salary' => 200000.00,
+            'total_deductions' => 500.00,
+            'net_salary' => 199500.00,
+        ]);
+    }
+
+    /** 5. Admin can create shift template */
+    public function test_admin_can_create_shift_template(): void
+    {
+        $admin = $this->createAdmin();
+
+        $response = $this->actingAs($admin)
+            ->post(route('admin.shifts.store'), [
+                'name' => 'Shift 1 (Morning)',
+                'resumption_time' => '07:00',
+                'closing_time' => '15:00',
+                'department' => 'acf',
+                'description' => 'Morning shift schedule',
+            ]);
+
+        $response->assertRedirect();
+
+        $this->assertDatabaseHas('shifts', [
+            'name' => 'Shift 1 (Morning)',
+            'department' => 'acf',
+        ]);
+    }
+}
