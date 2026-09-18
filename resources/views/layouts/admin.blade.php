@@ -29,10 +29,10 @@
         }
     </style>
 </head>
-<body class="min-h-screen bg-slate-100 flex flex-col antialiased">
+<body class="bg-slate-100 antialiased flex flex-col h-screen overflow-hidden">
 
     <!-- Top Navigation Header -->
-    <header class="bg-[#0f172a] text-white h-16 sticky top-0 z-40 flex items-center justify-between px-4 md:px-6 shadow-md border-b border-slate-800">
+    <header class="bg-[#0f172a] text-white h-16 flex-shrink-0 sticky top-0 z-40 flex items-center justify-between px-4 md:px-6 shadow-md border-b border-slate-800">
         <div class="flex items-center gap-3">
             <!-- 3 Dashes Hamburger Button (Mobile, Tablet & PC) -->
             <button type="button" id="sidebar-toggle" onclick="toggleSidebar()" class="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition focus:outline-none ring-1 ring-slate-700/50" aria-label="Toggle Sidebar Navigation">
@@ -74,10 +74,10 @@
         </div>
     </header>
 
-    <div class="flex-1 flex relative">
+    <div class="flex-1 flex overflow-hidden">
 
         <!-- Sidebar Navigation Drawer (Mobile, Tablet & Desktop responsive) -->
-        <aside id="admin-sidebar" class="w-64 bg-[#0f172a] text-white flex-shrink-0 flex flex-col justify-between p-4 border-r border-slate-800 sidebar-transition fixed lg:static inset-y-0 left-0 z-30 transform -translate-x-full lg:translate-x-0 top-16 lg:top-0 h-[calc(100vh-4rem)] overflow-y-auto">
+        <aside id="admin-sidebar" class="w-64 bg-[#0f172a] text-white flex-shrink-0 flex flex-col justify-between p-4 border-r border-slate-800 sidebar-transition fixed lg:sticky lg:top-0 inset-y-0 left-0 z-30 transform -translate-x-full lg:translate-x-0 top-16 h-[calc(100vh-4rem)] lg:h-full overflow-y-auto">
             <div class="space-y-6">
                 <div>
                     <div class="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 px-3 mb-2">Main Navigation</div>
