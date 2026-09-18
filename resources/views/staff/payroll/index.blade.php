@@ -5,12 +5,12 @@
 @section('content')
 <div class="max-w-4xl mx-auto space-y-6">
     <!-- Header -->
-    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-            <h1 class="text-xl font-black text-slate-900 tracking-tight">Payroll & Salary Statement</h1>
-            <p class="text-xs text-slate-500 font-medium">Monthly base salary, lateness deductions, and net balance</p>
+    <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="min-w-0">
+            <h1 class="text-lg sm:text-xl font-black text-slate-900 tracking-tight truncate">Payroll & Salary Statement</h1>
+            <p class="text-xs text-slate-500 font-medium mt-0.5">Monthly base salary, lateness deductions, and net balance</p>
         </div>
-        <div>
+        <div class="shrink-0">
             <form method="GET" action="{{ route('staff.payroll.index') }}" class="flex items-center gap-2">
                 <label for="pay_period" class="text-xs font-bold text-slate-600">Pay Period:</label>
                 <input type="month" id="pay_period" name="pay_period" value="{{ $selectedPeriod }}" onchange="this.form.submit()" class="text-xs font-bold bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-indigo-500">
@@ -21,17 +21,17 @@
     <!-- Salary Balance Summary Cards -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <!-- Base Salary -->
-        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80">
-            <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Base Monthly Salary</div>
-            <div class="text-2xl font-black text-slate-900">₦{{ number_format($balance['base_salary'], 2) }}</div>
-            <div class="text-[11px] text-slate-400 font-medium mt-1">Configured monthly base</div>
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 min-w-0 overflow-hidden">
+            <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 truncate">Base Monthly Salary</div>
+            <div class="text-lg sm:text-xl md:text-2xl font-black text-slate-900 font-mono tracking-tight truncate">₦{{ number_format($balance['base_salary'], 2) }}</div>
+            <div class="text-[11px] text-slate-400 font-medium mt-1 truncate">Configured monthly base</div>
         </div>
 
         <!-- Total Deductions -->
-        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80">
-            <div class="text-xs font-bold text-rose-500 uppercase tracking-wider mb-1">Deductions ({{ $selectedPeriod }})</div>
-            <div class="text-2xl font-black text-rose-600">-₦{{ number_format($balance['total_deductions'], 2) }}</div>
-            <div class="text-[11px] text-rose-500/80 font-medium mt-1">
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 min-w-0 overflow-hidden">
+            <div class="text-xs font-bold text-rose-500 uppercase tracking-wider mb-1 truncate">Deductions ({{ $selectedPeriod }})</div>
+            <div class="text-lg sm:text-xl md:text-2xl font-black text-rose-600 font-mono tracking-tight truncate">-₦{{ number_format($balance['total_deductions'], 2) }}</div>
+            <div class="text-[11px] text-rose-500/80 font-medium mt-1 truncate">
                 {{ $balance['late_count'] }} late check-in penalty @ ₦500
                 @if($balance['total_waived'] > 0)
                     &bull; <span class="text-emerald-600">₦{{ number_format($balance['total_waived']) }} Waived</span>
@@ -40,10 +40,10 @@
         </div>
 
         <!-- Net Payable Salary -->
-        <div class="bg-gradient-to-br from-indigo-900 to-slate-900 text-white p-5 rounded-2xl shadow-sm">
-            <div class="text-xs font-bold text-indigo-300 uppercase tracking-wider mb-1">Net Balance Payable</div>
-            <div class="text-2xl font-black text-emerald-400">₦{{ number_format($balance['net_salary'], 2) }}</div>
-            <div class="text-[11px] text-indigo-200/80 font-medium mt-1">Estimated payout for {{ $selectedPeriod }}</div>
+        <div class="bg-gradient-to-br from-indigo-900 to-slate-900 text-white p-5 rounded-2xl shadow-sm min-w-0 overflow-hidden">
+            <div class="text-xs font-bold text-indigo-300 uppercase tracking-wider mb-1 truncate">Net Balance Payable</div>
+            <div class="text-lg sm:text-xl md:text-2xl font-black text-emerald-400 font-mono tracking-tight truncate">₦{{ number_format($balance['net_salary'], 2) }}</div>
+            <div class="text-[11px] text-indigo-200/80 font-medium mt-1 truncate">Estimated payout for {{ $selectedPeriod }}</div>
         </div>
     </div>
 

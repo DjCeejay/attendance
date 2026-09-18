@@ -19,7 +19,13 @@
             color: #0f172a;
         }
         .sidebar-transition {
-            transition: transform 0.3s ease, width 0.3s ease;
+            transition: transform 0.3s ease, width 0.3s ease, margin 0.3s ease;
+        }
+        .stat-number {
+            font-size: clamp(1.125rem, 4vw, 1.875rem);
+            line-height: 1.2;
+            word-break: break-word;
+            overflow-wrap: anywhere;
         }
     </style>
 </head>
@@ -27,9 +33,9 @@
 
     <!-- Top Navigation Header -->
     <header class="bg-[#0f172a] text-white h-16 sticky top-0 z-40 flex items-center justify-between px-4 md:px-6 shadow-md border-b border-slate-800">
-        <div class="flex items-center gap-4">
-            <!-- 3 Dashes Hamburger Button -->
-            <button type="button" id="sidebar-toggle" onclick="toggleSidebar()" class="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition focus:outline-none" aria-label="Toggle Sidebar Navigation">
+        <div class="flex items-center gap-3">
+            <!-- 3 Dashes Hamburger Button (Mobile, Tablet & PC) -->
+            <button type="button" id="sidebar-toggle" onclick="toggleSidebar()" class="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition focus:outline-none ring-1 ring-slate-700/50" aria-label="Toggle Sidebar Navigation">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
                 </svg>
@@ -48,8 +54,8 @@
         </div>
 
         <!-- Top Right Actions -->
-        <div class="flex items-center gap-4">
-            <a href="{{ route('attendance.dashboard') }}" class="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-indigo-300 hover:text-white hover:bg-slate-700 transition">
+        <div class="flex items-center gap-3">
+            <a href="{{ route('attendance.dashboard') }}" class="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-indigo-300 hover:text-white hover:bg-slate-700 transition border border-slate-700/50">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
                 <span>Staff Portal</span>
             </a>
@@ -61,7 +67,7 @@
 
             <form method="POST" action="{{ route('logout') }}">
                 @csrf
-                <button type="submit" class="text-xs font-bold text-slate-300 hover:text-rose-400 transition px-2 py-1">
+                <button type="submit" class="text-xs font-bold text-slate-300 hover:text-rose-400 transition px-2.5 py-1 rounded-lg hover:bg-slate-800">
                     Logout
                 </button>
             </form>
@@ -70,8 +76,8 @@
 
     <div class="flex-1 flex relative">
 
-        <!-- Sidebar Navigation Drawer -->
-        <aside id="admin-sidebar" class="w-64 bg-[#0f172a] text-white flex-shrink-0 flex flex-col justify-between p-4 border-r border-slate-800 sidebar-transition fixed md:static inset-y-0 left-0 z-30 transform -translate-x-full md:translate-x-0 top-16 md:top-0 h-[calc(100vh-4rem)]">
+        <!-- Sidebar Navigation Drawer (Mobile, Tablet & Desktop responsive) -->
+        <aside id="admin-sidebar" class="w-64 bg-[#0f172a] text-white flex-shrink-0 flex flex-col justify-between p-4 border-r border-slate-800 sidebar-transition fixed lg:static inset-y-0 left-0 z-30 transform -translate-x-full lg:translate-x-0 top-16 lg:top-0 h-[calc(100vh-4rem)] overflow-y-auto">
             <div class="space-y-6">
                 <div>
                     <div class="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 px-3 mb-2">Main Navigation</div>
@@ -83,7 +89,7 @@
                             <span>Dashboard Overview</span>
                         </a>
 
-                        <!-- Staff Analytics & Trends (NEW) -->
+                        <!-- Staff Analytics & Trends -->
                         <a href="{{ route('admin.attendance.analytics') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition {{ request()->routeIs('admin.attendance.analytics') ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }}">
                             <svg class="w-4 h-4 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                             <span>Staff Analytics & Trends</span>
@@ -95,13 +101,13 @@
                             <span>User Management</span>
                         </a>
 
-                        <!-- Payroll & Salary (NEW) -->
+                        <!-- Payroll & Salary -->
                         <a href="{{ route('admin.payroll.index') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition {{ request()->routeIs('admin.payroll.*') ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }}">
                             <svg class="w-4 h-4 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                             <span>Payroll & Salary</span>
                         </a>
 
-                        <!-- Shift Schedules (NEW) -->
+                        <!-- Shift Schedules -->
                         <a href="{{ route('admin.shifts.index') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition {{ request()->routeIs('admin.shifts.*') ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white' }}">
                             <svg class="w-4 h-4 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                             <span>Shift Templates</span>
@@ -130,22 +136,22 @@
             </div>
         </aside>
 
-        <!-- Overlay backdrop for mobile -->
-        <div id="sidebar-backdrop" onclick="toggleSidebar()" class="hidden fixed inset-0 bg-slate-900/50 z-20 md:hidden"></div>
+        <!-- Overlay backdrop for Mobile & Tablet -->
+        <div id="sidebar-backdrop" onclick="toggleSidebar()" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-20 lg:hidden"></div>
 
         <!-- Main Content Area -->
-        <main class="flex-1 p-6 md:p-8 min-w-0 overflow-y-auto">
+        <main class="flex-1 p-4 sm:p-6 lg:p-8 min-w-0 overflow-y-auto">
             @if(session('success'))
-                <div class="mb-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-900 font-semibold rounded-xl flex items-center justify-between shadow-sm">
+                <div class="mb-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-900 font-semibold rounded-xl flex items-center justify-between shadow-sm text-xs sm:text-sm">
                     <div class="flex items-center gap-2">
-                        <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                        <svg class="w-5 h-5 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                         <span>{{ session('success') }}</span>
                     </div>
                 </div>
             @endif
 
             @if(session('error') || $errors->any())
-                <div class="mb-6 p-4 bg-rose-50 border border-rose-200 text-rose-900 font-semibold rounded-xl shadow-sm">
+                <div class="mb-6 p-4 bg-rose-50 border border-rose-200 text-rose-900 font-semibold rounded-xl shadow-sm text-xs sm:text-sm">
                     @if(session('error')) <div>{{ session('error') }}</div> @endif
                     @foreach($errors->all() as $err) <div>{{ $err }}</div> @endforeach
                 </div>
@@ -160,13 +166,20 @@
         function toggleSidebar() {
             const sidebar = document.getElementById('admin-sidebar');
             const backdrop = document.getElementById('sidebar-backdrop');
+            const isMobileOrTablet = window.innerWidth < 1024;
 
-            if (sidebar.classList.contains('-translate-x-full')) {
-                sidebar.classList.remove('-translate-x-full');
-                backdrop.classList.remove('hidden');
+            if (isMobileOrTablet) {
+                const isHidden = sidebar.classList.contains('-translate-x-full');
+                if (isHidden) {
+                    sidebar.classList.remove('-translate-x-full');
+                    backdrop.classList.remove('hidden');
+                } else {
+                    sidebar.classList.add('-translate-x-full');
+                    backdrop.classList.add('hidden');
+                }
             } else {
-                sidebar.classList.add('-translate-x-full');
-                backdrop.classList.add('hidden');
+                // Desktop toggle
+                sidebar.classList.toggle('lg:hidden');
             }
         }
     </script>

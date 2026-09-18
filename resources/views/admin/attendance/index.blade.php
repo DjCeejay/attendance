@@ -114,35 +114,35 @@
     @endif
 
     <!-- Overview Metric Cards -->
-    <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Present Today</span>
-            <span class="text-2xl font-black text-slate-900 mt-1 block">{{ $presentCount }}</span>
-            <span class="text-[11px] text-slate-500 mt-0.5 block">of {{ $totalStaffCount }} total staff</span>
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm min-w-0 overflow-hidden">
+            <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block truncate">Present Today</span>
+            <span class="text-xl md:text-2xl font-black text-slate-900 mt-1 block truncate">{{ $presentCount }}</span>
+            <span class="text-[11px] text-slate-500 mt-0.5 block truncate">of {{ $totalStaffCount }} total staff</span>
         </div>
 
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Currently Present</span>
-            <span class="text-2xl font-black text-emerald-600 mt-1 block">{{ $currentlyPresentCount }}</span>
-            <span class="text-[11px] text-slate-500 mt-0.5 block">Checked in & not out</span>
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm min-w-0 overflow-hidden">
+            <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block truncate">Currently Present</span>
+            <span class="text-xl md:text-2xl font-black text-emerald-600 mt-1 block truncate">{{ $currentlyPresentCount }}</span>
+            <span class="text-[11px] text-slate-500 mt-0.5 block truncate">Checked in & not out</span>
         </div>
 
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Late Arrival</span>
-            <span class="text-2xl font-black text-amber-600 mt-1 block">{{ $lateCount }}</span>
-            <span class="text-[11px] text-slate-500 mt-0.5 block">Exceeded threshold</span>
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm min-w-0 overflow-hidden">
+            <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block truncate">Late Arrival</span>
+            <span class="text-xl md:text-2xl font-black text-amber-600 mt-1 block truncate">{{ $lateCount }}</span>
+            <span class="text-[11px] text-slate-500 mt-0.5 block truncate">Exceeded threshold</span>
         </div>
 
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Checked Out</span>
-            <span class="text-2xl font-black text-slate-700 mt-1 block">{{ $checkedOutCount }}</span>
-            <span class="text-[11px] text-slate-500 mt-0.5 block">Completed shift</span>
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm min-w-0 overflow-hidden">
+            <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block truncate">Checked Out</span>
+            <span class="text-xl md:text-2xl font-black text-slate-700 mt-1 block truncate">{{ $checkedOutCount }}</span>
+            <span class="text-[11px] text-slate-500 mt-0.5 block truncate">Completed shift</span>
         </div>
 
-        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-            <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Not Checked In</span>
-            <span class="text-2xl font-black text-rose-600 mt-1 block">{{ $notCheckedInCount }}</span>
-            <span class="text-[11px] text-slate-500 mt-0.5 block">Absent or pending</span>
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm col-span-2 md:col-span-1 min-w-0 overflow-hidden">
+            <span class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block truncate">Not Checked In</span>
+            <span class="text-xl md:text-2xl font-black text-rose-600 mt-1 block truncate">{{ $notCheckedInCount }}</span>
+            <span class="text-[11px] text-slate-500 mt-0.5 block truncate">Absent or pending</span>
         </div>
     </div>
 

@@ -5,35 +5,37 @@
 @section('content')
 <div class="space-y-6">
     <!-- Top Header -->
-    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-            <h1 class="text-xl font-black text-slate-900 tracking-tight">Payroll & Staff Salary Management</h1>
-            <p class="text-xs text-slate-500 font-medium">Manage base salaries, shift schedules, lateness penalties, and execute monthly payroll reset</p>
-        </div>
-        <div class="flex items-center gap-3">
-            <form method="GET" action="{{ route('admin.payroll.index') }}" class="flex items-center gap-2">
-                <label for="pay_period" class="text-xs font-bold text-slate-600">Period:</label>
-                <input type="month" id="pay_period" name="pay_period" value="{{ $selectedPeriod }}" onchange="this.form.submit()" class="text-xs font-bold bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-indigo-500">
-            </form>
-            <button type="button" onclick="openResetModal()" class="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition shadow-sm">
-                Monthly Payroll Reset
-            </button>
+    <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col gap-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="min-w-0">
+                <h1 class="text-lg sm:text-xl font-black text-slate-900 tracking-tight truncate">Payroll & Staff Salary Management</h1>
+                <p class="text-xs text-slate-500 font-medium mt-0.5">Manage base salaries, shift schedules, lateness penalties, and execute monthly payroll reset</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 shrink-0">
+                <form method="GET" action="{{ route('admin.payroll.index') }}" class="flex items-center gap-2">
+                    <label for="pay_period" class="text-xs font-bold text-slate-600">Period:</label>
+                    <input type="month" id="pay_period" name="pay_period" value="{{ $selectedPeriod }}" onchange="this.form.submit()" class="text-xs font-bold bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-indigo-500">
+                </form>
+                <button type="button" onclick="openResetModal()" class="px-3 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition shadow-sm whitespace-nowrap">
+                    Monthly Payroll Reset
+                </button>
+            </div>
         </div>
     </div>
 
     <!-- Overview Stats -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80">
-            <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Total Base Payroll ({{ $selectedPeriod }})</div>
-            <div class="text-2xl font-black text-slate-900">₦{{ number_format($grandBaseSalary, 2) }}</div>
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 min-w-0 overflow-hidden">
+            <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 truncate">Total Base Payroll ({{ $selectedPeriod }})</div>
+            <div class="stat-number font-black text-slate-900 font-mono tracking-tight truncate">₦{{ number_format($grandBaseSalary, 2) }}</div>
         </div>
-        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80">
-            <div class="text-xs font-bold text-rose-500 uppercase tracking-wider mb-1">Total Lateness Deductions</div>
-            <div class="text-2xl font-black text-rose-600">-₦{{ number_format($grandTotalDeductions, 2) }}</div>
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 min-w-0 overflow-hidden">
+            <div class="text-xs font-bold text-rose-500 uppercase tracking-wider mb-1 truncate">Total Lateness Deductions</div>
+            <div class="stat-number font-black text-rose-600 font-mono tracking-tight truncate">-₦{{ number_format($grandTotalDeductions, 2) }}</div>
         </div>
-        <div class="bg-gradient-to-br from-indigo-900 to-slate-900 text-white p-5 rounded-2xl shadow-sm">
-            <div class="text-xs font-bold text-indigo-300 uppercase tracking-wider mb-1">Total Net Payable</div>
-            <div class="text-2xl font-black text-emerald-400">₦{{ number_format($grandNetSalary, 2) }}</div>
+        <div class="bg-gradient-to-br from-indigo-900 to-slate-900 text-white p-5 rounded-2xl shadow-sm min-w-0 overflow-hidden">
+            <div class="text-xs font-bold text-indigo-300 uppercase tracking-wider mb-1 truncate">Total Net Payable</div>
+            <div class="stat-number font-black text-emerald-400 font-mono tracking-tight truncate">₦{{ number_format($grandNetSalary, 2) }}</div>
         </div>
     </div>
 

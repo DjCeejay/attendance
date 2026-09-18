@@ -90,11 +90,11 @@
 
     <!-- Monthly Salary & Balance Widget -->
     @if(isset($payrollSummary))
-    <div class="bg-gradient-to-r from-slate-900 to-indigo-950 text-white p-4 rounded-2xl shadow-sm flex items-center justify-between gap-4">
-        <div>
-            <div class="text-[10px] font-bold uppercase tracking-wider text-indigo-300">Est. Salary Balance (This Month)</div>
-            <div class="text-xl font-black text-emerald-400 mt-0.5">₦{{ number_format($payrollSummary['net_salary'], 2) }}</div>
-            <div class="text-[10px] text-slate-300 font-medium mt-0.5">
+    <div class="bg-gradient-to-r from-slate-900 to-indigo-950 text-white p-4 rounded-2xl shadow-sm flex items-center justify-between gap-3 min-w-0 overflow-hidden">
+        <div class="min-w-0 flex-1">
+            <div class="text-[10px] font-bold uppercase tracking-wider text-indigo-300 truncate">Est. Salary Balance (This Month)</div>
+            <div class="text-base sm:text-lg md:text-xl font-black text-emerald-400 mt-0.5 font-mono tracking-tight truncate">₦{{ number_format($payrollSummary['net_salary'], 2) }}</div>
+            <div class="text-[10px] text-slate-300 font-medium mt-0.5 truncate">
                 Base: ₦{{ number_format($payrollSummary['base_salary']) }}
                 @if($payrollSummary['total_deductions'] > 0)
                     &bull; <span class="text-rose-400">Deductions: -₦{{ number_format($payrollSummary['total_deductions']) }}</span>
