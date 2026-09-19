@@ -150,10 +150,12 @@
                 </div>
             @endif
 
-            @if(session('error') || $errors->any())
+            @if(session('error') || (isset($errors) && $errors->any()))
                 <div class="mb-6 p-4 bg-rose-50 border border-rose-200 text-rose-900 font-semibold rounded-xl shadow-sm text-xs sm:text-sm">
                     @if(session('error')) <div>{{ session('error') }}</div> @endif
-                    @foreach($errors->all() as $err) <div>{{ $err }}</div> @endforeach
+                    @if(isset($errors))
+                        @foreach($errors->all() as $err) <div>{{ $err }}</div> @endforeach
+                    @endif
                 </div>
             @endif
 

@@ -58,6 +58,7 @@ class AdminPayrollController extends Controller
 
         return view('admin.payroll.index', compact(
             'selectedPeriod',
+            'staffUsers',
             'staffPayrollData',
             'grandBaseSalary',
             'grandTotalDeductions',
