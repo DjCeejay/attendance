@@ -204,4 +204,60 @@ class PayrollAndShiftTest extends TestCase
             'department' => 'acf',
         ]);
     }
+
+    /** 6. Saturday resumption for ARTSCI staff defaults to 09:00 AM (not late before 09:15 AM) */
+    public function test_artsci_saturday_resumption_defaults_to_9am(): void
+    {
+        $staff = $this->createStaff('artsci_staff', 150000.00);
+
+        // Saturday 2026-09-26 at 09:10 AM (resumption 09:00 AM + 15 min grace = 09:15 AM deadline)
+        $saturdayDate = Carbon::parse('2026-09-26 09:10:00', 'Africa/Lagos');
+
+        $expectedResumption = $staff->staffProfile->getExpectedResumptionTime($saturdayDate);
+        $this->assertEquals('09:00', $expectedResumption);
+
+        $record = AttendanceRecord::create([
+            'user_id' => $staff->id,
+            'attendance_date' => '2026-09-26',
+            'check_in_at' => $saturdayDate,
+            'status' => 'present',
+        ]);
+
+        $payrollService = new PayrollService();
+        $deduction = $payrollService->evaluateAndApplyLatenessPenalty($record, $staff);
+
+        $this->assertNull($deduction);
+        $this->assertDatabaseMissing('salary_deductions', ['attendance_record_id' => $record->id]);
+    }
+
+    /** 7. Admin can apply a custom manual penalty / deduction to staff */
+    public function test_admin_can_apply_manual_salary_deduction(): void
+    {
+        $admin = $this->createAdmin();
+        $staff = $this->createStaff('artsci_staff', 180000.00);
+
+        $response = $this->actingAs($admin)
+            ->post(route('admin.payroll.deductions.manual'), [
+                'user_id' => $staff->id,
+                'amount' => 2500.00,
+                'reason' => 'Property damage misconduct penalty',
+                'pay_period' => '2026-09',
+            ]);
+
+        $response->assertRedirect();
+
+        $this->assertDatabaseHas('salary_deductions', [
+            'user_id' => $staff->id,
+            'amount' => 2500.00,
+            'deduction_type' => 'manual_penalty',
+            'reason' => 'Property damage misconduct penalty',
+            'status' => 'active',
+            'pay_period' => '2026-09',
+        ]);
+
+        $payrollService = new PayrollService();
+        $balance = $payrollService->calculateMonthlyBalance($staff, '2026-09');
+        $this->assertEquals(177500.00, $balance['net_salary']);
+        $this->assertEquals(2500.00, $balance['total_deductions']);
+    }
 }

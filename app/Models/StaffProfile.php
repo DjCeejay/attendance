@@ -39,8 +39,9 @@ class StaffProfile extends Model
 
     /**
      * Get expected resumption time string (H:i format e.g. "08:00")
+     * On Saturdays, default resumption for staff without shift/custom override is 09:00 AM.
      */
-    public function getExpectedResumptionTime(string $defaultTime = '09:00'): string
+    public function getExpectedResumptionTime($date = null, string $defaultTime = '08:00'): string
     {
         if ($this->custom_resumption_time) {
             return \Carbon\Carbon::parse($this->custom_resumption_time)->format('H:i');
@@ -48,6 +49,12 @@ class StaffProfile extends Model
 
         if ($this->shift && $this->shift->resumption_time) {
             return \Carbon\Carbon::parse($this->shift->resumption_time)->format('H:i');
+        }
+
+        $carbon = $date ? ($date instanceof \Carbon\Carbon ? $date : \Carbon\Carbon::parse($date)) : now();
+
+        if ($carbon->isSaturday()) {
+            return '09:00';
         }
 
         return $defaultTime;

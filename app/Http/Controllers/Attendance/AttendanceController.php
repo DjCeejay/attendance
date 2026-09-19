@@ -110,7 +110,7 @@ class AttendanceController extends Controller
 
         $attendanceEnabled = AttendanceSetting::get('attendance_enabled', true);
         $profile           = $user->staffProfile;
-        $expectedArrival   = $profile ? $profile->getExpectedResumptionTime(AttendanceSetting::get('expected_arrival_time', '09:00')) : AttendanceSetting::get('expected_arrival_time', '09:00');
+        $expectedArrival   = $profile ? $profile->getExpectedResumptionTime($today, AttendanceSetting::get('expected_arrival_time', '08:00')) : AttendanceSetting::get('expected_arrival_time', '08:00');
         $checkInStart      = AttendanceSetting::get('check_in_start_time', '07:00');
         $checkInClosing    = AttendanceSetting::get('check_in_closing_time', '12:00');
 
@@ -150,7 +150,7 @@ class AttendanceController extends Controller
         $user = $record->user;
         $profile = $user?->staffProfile;
 
-        $expectedTimeStr = $profile ? $profile->getExpectedResumptionTime(AttendanceSetting::get('expected_arrival_time', '09:00')) : AttendanceSetting::get('expected_arrival_time', '09:00');
+        $expectedTimeStr = $profile ? $profile->getExpectedResumptionTime($record->attendance_date, AttendanceSetting::get('expected_arrival_time', '08:00')) : AttendanceSetting::get('expected_arrival_time', '08:00');
         $lateThreshold   = $profile ? $profile->grace_period_minutes : (int) AttendanceSetting::get('late_threshold_minutes', 15);
 
         // Convert check_in_at to local WAT timezone
@@ -318,7 +318,7 @@ class AttendanceController extends Controller
         // 5. Evaluate late status using staff profile shift/resumption & off-days
         $now             = self::nowTz();
         $profile         = $user->staffProfile;
-        $expectedTimeStr = $profile ? $profile->getExpectedResumptionTime(AttendanceSetting::get('expected_arrival_time', '09:00')) : AttendanceSetting::get('expected_arrival_time', '09:00');
+        $expectedTimeStr = $profile ? $profile->getExpectedResumptionTime($today, AttendanceSetting::get('expected_arrival_time', '08:00')) : AttendanceSetting::get('expected_arrival_time', '08:00');
         $lateThreshold   = $profile ? $profile->grace_period_minutes : (int) AttendanceSetting::get('late_threshold_minutes', 15);
 
         // Build expected arrival for today in the correct timezone

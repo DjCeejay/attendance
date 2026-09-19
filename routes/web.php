@@ -34,6 +34,7 @@ Route::middleware(['auth'])->group(function () {
     Route::prefix('admin/payroll')->name('admin.payroll.')->group(function () {
         Route::get('/', [\App\Http\Controllers\Attendance\AdminPayrollController::class, 'index'])->name('index');
         Route::post('/staff/{user}', [\App\Http\Controllers\Attendance\AdminPayrollController::class, 'updateStaffProfile'])->name('staff.update');
+        Route::post('/deductions/manual', [\App\Http\Controllers\Attendance\AdminPayrollController::class, 'storeManualDeduction'])->name('deductions.manual');
         Route::post('/deductions/{deduction}/waive', [\App\Http\Controllers\Attendance\AdminPayrollController::class, 'waiveDeduction'])->name('deductions.waive');
         Route::post('/reset', [\App\Http\Controllers\Attendance\AdminPayrollController::class, 'executeReset'])->name('reset');
     });

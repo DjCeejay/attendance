@@ -16,6 +16,10 @@
                     <label for="pay_period" class="text-xs font-bold text-slate-600">Period:</label>
                     <input type="month" id="pay_period" name="pay_period" value="{{ $selectedPeriod }}" onchange="this.form.submit()" class="text-xs font-bold bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-indigo-500">
                 </form>
+                <button type="button" onclick="openManualDeductionModal()" class="px-3 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition shadow-sm whitespace-nowrap flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                    <span>Add Penalty / Deduction</span>
+                </button>
                 <button type="button" onclick="openResetModal()" class="px-3 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition shadow-sm whitespace-nowrap">
                     Monthly Payroll Reset
                 </button>
@@ -127,16 +131,17 @@
         </div>
     </div>
 
-    <!-- Recent Lateness Deductions & Waivers Log -->
+    <!-- Recent Lateness & Manual Deductions Log -->
     <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
         <div class="p-4 border-b border-slate-100 flex items-center justify-between">
-            <h2 class="text-sm font-bold text-slate-900">Lateness Penalties Log ({{ $selectedPeriod }})</h2>
+            <h2 class="text-sm font-bold text-slate-900">Deductions & Penalties Log ({{ $selectedPeriod }})</h2>
         </div>
         <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse text-xs">
                 <thead>
                     <tr class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-100">
                         <th class="p-3.5">Staff Member</th>
+                        <th class="p-3.5">Type</th>
                         <th class="p-3.5">Date & Time</th>
                         <th class="p-3.5">Reason</th>
                         <th class="p-3.5">Amount</th>
@@ -152,10 +157,21 @@
                                 <div class="text-[11px] text-slate-400">{{ $ded->user->email }}</div>
                             </td>
                             <td class="p-3.5">
+                                @if($ded->deduction_type === 'manual_penalty')
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800">
+                                        Manual Penalty
+                                    </span>
+                                @else
+                                    <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
+                                        Lateness
+                                    </span>
+                                @endif
+                            </td>
+                            <td class="p-3.5">
                                 {{ $ded->created_at->format('M j, Y - g:i A') }}
                             </td>
                             <td class="p-3.5">
-                                {{ $ded->reason ?: 'Lateness penalty' }}
+                                {{ $ded->reason ?: 'Penalty deduction' }}
                             </td>
                             <td class="p-3.5 font-bold {{ $ded->isWaived() ? 'line-through text-slate-400' : 'text-rose-600' }}">
                                 ₦{{ number_format($ded->amount, 2) }}
@@ -183,7 +199,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="p-8 text-center text-slate-400 text-xs">No lateness deductions logged for {{ $selectedPeriod }}.</td>
+                            <td colspan="7" class="p-8 text-center text-slate-400 text-xs">No salary deductions or penalties logged for {{ $selectedPeriod }}.</td>
                         </tr>
                     @endforelse
                 </tbody>
@@ -301,7 +317,58 @@
     </div>
 </div>
 
+<!-- Modal: Add Manual Penalty / Deduction -->
+<div id="manual-deduction-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden">
+    <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
+        <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+            <h3 class="text-sm font-extrabold text-slate-900">Add Manual Penalty / Deduction</h3>
+            <button type="button" onclick="closeManualDeductionModal()" class="text-slate-400 hover:text-slate-600 font-bold text-lg">&times;</button>
+        </div>
+
+        <form method="POST" action="{{ route('admin.payroll.deductions.manual') }}" class="space-y-4 text-xs">
+            @csrf
+            <div>
+                <label for="manual_user_id" class="block font-bold text-slate-700 mb-1">Select Staff Member</label>
+                <select id="manual_user_id" name="user_id" required class="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold bg-slate-50 focus:ring-2 focus:ring-indigo-500">
+                    <option value="">-- Choose Staff --</option>
+                    @foreach($staffUsers as $su)
+                        <option value="{{ $su->id }}">{{ $su->name }} ({{ $su->role }})</option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div>
+                <label for="manual_amount" class="block font-bold text-slate-700 mb-1">Penalty / Deduction Amount (₦)</label>
+                <input type="number" id="manual_amount" name="amount" step="50" min="50" placeholder="e.g. 1000" required class="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold bg-slate-50 focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <div>
+                <label for="manual_reason" class="block font-bold text-slate-700 mb-1">Reason / Description for Penalty</label>
+                <textarea id="manual_reason" name="reason" rows="3" placeholder="e.g. Misconduct penalty, unexcused absence, or property damage deduction" required class="w-full p-3 border border-slate-300 rounded-lg bg-slate-50 focus:ring-2 focus:ring-indigo-500"></textarea>
+            </div>
+
+            <div>
+                <label for="manual_pay_period" class="block font-bold text-slate-700 mb-1">Pay Period</label>
+                <input type="month" id="manual_pay_period" name="pay_period" value="{{ $selectedPeriod }}" required class="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold bg-slate-50 focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button type="button" onclick="closeManualDeductionModal()" class="px-4 py-2 font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition">Cancel</button>
+                <button type="submit" class="px-4 py-2 font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow transition">Apply Penalty</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
+    function openManualDeductionModal() {
+        document.getElementById('manual-deduction-modal').classList.remove('hidden');
+    }
+
+    function closeManualDeductionModal() {
+        document.getElementById('manual-deduction-modal').classList.add('hidden');
+    }
+
     function openStaffEditModal(userId, name, baseSalary, shiftId, customTime, offDays, gracePeriod) {
         document.getElementById('edit-modal-title').innerText = 'Edit Profile: ' + name;
         document.getElementById('staff-edit-form').action = '/admin/payroll/staff/' + userId;

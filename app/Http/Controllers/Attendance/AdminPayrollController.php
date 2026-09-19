@@ -95,7 +95,7 @@ class AdminPayrollController extends Controller
     }
 
     /**
-     * Waive a ₦500 lateness deduction
+     * Waive a lateness or manual penalty deduction
      */
     public function waiveDeduction(Request $request, SalaryDeduction $deduction)
     {
@@ -106,7 +106,48 @@ class AdminPayrollController extends Controller
         $admin = Auth::user();
         $this->payrollService->waivePenalty($deduction, $admin, $request->input('waiver_reason'));
 
-        return redirect()->back()->with('success', "₦500 penalty for {$deduction->user->name} has been waived.");
+        return redirect()->back()->with('success', "Penalty of ₦" . number_format($deduction->amount) . " for {$deduction->user->name} has been waived.");
+    }
+
+    /**
+     * Apply a custom manual penalty / deduction to a staff member.
+     */
+    public function storeManualDeduction(Request $request)
+    {
+        $validated = $request->validate([
+            'user_id'    => ['required', 'exists:users,id'],
+            'amount'     => ['required', 'numeric', 'min:1'],
+            'reason'     => ['required', 'string', 'max:500'],
+            'pay_period' => ['required', 'string', 'regex:/^\d{4}-\d{2}$/'],
+        ]);
+
+        $user = User::findOrFail($validated['user_id']);
+        $admin = Auth::user();
+
+        $deduction = SalaryDeduction::create([
+            'user_id'              => $user->id,
+            'attendance_record_id' => null,
+            'pay_period'           => $validated['pay_period'],
+            'amount'               => $validated['amount'],
+            'deduction_type'       => 'manual_penalty',
+            'reason'               => $validated['reason'],
+            'status'               => 'active',
+        ]);
+
+        \App\Models\AttendanceAuditLog::logEvent(
+            eventType: 'manual_deduction',
+            actor: $admin,
+            affectedUser: $user,
+            newValues: [
+                'deduction_id' => $deduction->id,
+                'amount'       => $validated['amount'],
+                'reason'       => $validated['reason'],
+                'pay_period'   => $validated['pay_period'],
+            ],
+            reason: "Manual penalty of ₦" . number_format($validated['amount']) . " applied to {$user->name} ({$validated['reason']})"
+        );
+
+        return redirect()->back()->with('success', "Manual penalty of ₦" . number_format($validated['amount']) . " applied to {$user->name}.");
     }
 
     /**
