@@ -50,24 +50,16 @@ class AttendanceController extends Controller
     }
 
     /**
-     * Proxy-aware real client IP resolution (handles Railway / Cloudflare).
+     * Proxy-aware real client IP resolution using Laravel trusted-proxy middleware (Railway / Cloudflare).
      */
     public static function resolveClientIp(Request $request): string
     {
-        $xForwardedFor = $request->header('x-forwarded-for');
-        if (!empty($xForwardedFor)) {
-            $ips = array_map('trim', explode(',', $xForwardedFor));
-            if (!empty($ips[0]) && filter_var($ips[0], FILTER_VALIDATE_IP)) {
-                return $ips[0];
-            }
+        $ip = $request->ip();
+        if (!empty($ip) && filter_var($ip, FILTER_VALIDATE_IP)) {
+            return $ip;
         }
 
-        $xRealIp = $request->header('x-real-ip');
-        if (!empty($xRealIp) && filter_var(trim($xRealIp), FILTER_VALIDATE_IP)) {
-            return trim($xRealIp);
-        }
-
-        return $request->ip() ?: '127.0.0.1';
+        return '127.0.0.1';
     }
 
     public function dashboard(Request $request)

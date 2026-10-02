@@ -72,6 +72,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/networks/sync-ip', [AdminAttendance::class, 'syncCurrentIp'])->name('networks.sync-ip');
         Route::put('/networks/{network}', [AdminAttendance::class, 'updateNetwork'])->name('networks.update');
         Route::post('/networks/{network}/toggle', [AdminAttendance::class, 'toggleNetwork'])->name('networks.toggle');
+        Route::post('/networks/{network}/refresh-ddns', [AdminAttendance::class, 'refreshDdns'])->name('networks.refresh-ddns');
         Route::delete('/networks/{network}', [AdminAttendance::class, 'destroyNetwork'])->name('networks.destroy');
 
         // Settings

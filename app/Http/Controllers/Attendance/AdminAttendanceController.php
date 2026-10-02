@@ -501,6 +501,13 @@ class AdminAttendanceController extends Controller
         $networks = AttendanceNetwork::orderBy('created_at', 'desc')->get();
         $currentIp = AttendanceController::resolveClientIp($request);
 
+        // Resolve DDNS status for enabled DDNS networks
+        foreach ($networks as $net) {
+            if ($net->ddns_enabled) {
+                $net->resolveDdns();
+            }
+        }
+
         return view('admin.attendance.networks', compact('networks', 'currentIp'));
     }
 
@@ -539,18 +546,34 @@ class AdminAttendanceController extends Controller
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'ip_range' => ['required', 'string', 'max:500'],
+            'ip_range' => ['nullable', 'string', 'max:500'],
+            'ddns_hostname' => ['nullable', 'string', 'max:255'],
+            'ddns_enabled' => ['boolean'],
             'description' => ['nullable', 'string', 'max:1000'],
             'enabled' => ['boolean'],
         ]);
 
+        $ipRange = trim($validated['ip_range'] ?? '');
+        $ddnsHostname = trim($validated['ddns_hostname'] ?? '');
+        $ddnsEnabled = $request->boolean('ddns_enabled');
+
+        if (empty($ipRange) && empty($ddnsHostname)) {
+            return back()->with('error', 'Please provide either a static IP/CIDR range or a Dynamic DNS (DDNS) hostname.');
+        }
+
         $network = AttendanceNetwork::create([
             'name' => $validated['name'],
-            'ip_range' => $validated['ip_range'],
+            'ip_range' => $ipRange ?: '*',
+            'ddns_hostname' => $ddnsHostname ?: null,
+            'ddns_enabled' => $ddnsEnabled,
             'description' => $validated['description'] ?? null,
             'enabled' => $request->boolean('enabled', true),
             'created_by' => Auth::id(),
         ]);
+
+        if ($network->ddns_enabled) {
+            $network->resolveDdns(forceRefresh: true);
+        }
 
         return back()->with('success', 'Office network range added successfully.');
     }
@@ -561,19 +584,48 @@ class AdminAttendanceController extends Controller
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'ip_range' => ['required', 'string', 'max:500'],
+            'ip_range' => ['nullable', 'string', 'max:500'],
+            'ddns_hostname' => ['nullable', 'string', 'max:255'],
+            'ddns_enabled' => ['boolean'],
             'description' => ['nullable', 'string', 'max:1000'],
             'enabled' => ['boolean'],
         ]);
 
+        $ipRange = trim($validated['ip_range'] ?? '');
+        $ddnsHostname = trim($validated['ddns_hostname'] ?? '');
+        $ddnsEnabled = $request->boolean('ddns_enabled');
+
         $network->update([
             'name' => $validated['name'],
-            'ip_range' => $validated['ip_range'],
+            'ip_range' => $ipRange,
+            'ddns_hostname' => $ddnsHostname ?: null,
+            'ddns_enabled' => $ddnsEnabled,
             'description' => $validated['description'] ?? null,
             'enabled' => $request->boolean('enabled'),
         ]);
 
+        if ($network->ddns_enabled) {
+            $network->resolveDdns(forceRefresh: true);
+        }
+
         return back()->with('success', 'Office network updated successfully.');
+    }
+
+    public function refreshDdns(AttendanceNetwork $network)
+    {
+        $this->authorizeAdmin();
+
+        $resolvedIp = $network->resolveDdns(forceRefresh: true);
+
+        if ($resolvedIp) {
+            return back()->with('success', "DDNS resolution updated for [{$network->name}]. Resolved IP: {$resolvedIp}");
+        }
+
+        if ($network->ddns_enabled && $network->effective_hostname) {
+            return back()->with('error', "DDNS resolution failed for [{$network->name}] hostname [{$network->effective_hostname}]. Check DNS or status log.");
+        }
+
+        return back()->with('info', "DDNS is not enabled or hostname is empty for [{$network->name}].");
     }
 
     public function toggleNetwork(AttendanceNetwork $network)
