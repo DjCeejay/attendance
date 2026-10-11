@@ -12,8 +12,23 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // Trust all proxy headers (Railway / Cloudflare / Load Balancers)
-        $middleware->trustProxies(at: '*');
+        $rawTrustedProxies = env('TRUSTED_PROXIES', '127.0.0.1,::1');
+        $trustedProxies = array_values(array_filter(array_map(
+            static fn (string $proxy): string => trim($proxy),
+            preg_split('/[\s,]+/', (string) $rawTrustedProxies)
+        ), static fn (string $proxy): bool => $proxy !== '' && $proxy !== '*'));
+
+        if (empty($trustedProxies)) {
+            $trustedProxies = ['127.0.0.1', '::1'];
+        }
+
+        $middleware->trustProxies(
+            at: $trustedProxies,
+            headers: Request::HEADER_X_FORWARDED_FOR
+                | Request::HEADER_X_FORWARDED_HOST
+                | Request::HEADER_X_FORWARDED_PORT
+                | Request::HEADER_X_FORWARDED_PROTO,
+        );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

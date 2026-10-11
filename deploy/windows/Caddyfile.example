@@ -1,0 +1,77 @@
+# ==============================================================================
+# ARTSCI Attendance - Production Caddyfile for Windows Office Server
+# Location: C:\tools\caddy\Caddyfile (or C:\artsci-attendance\Caddyfile)
+# ==============================================================================
+
+{
+    # Disable remote administrative API endpoint for security
+    admin off
+}
+
+# ==============================================================================
+# Office Domain Configuration (Replace attendance.artsci.ng with your domain)
+# ==============================================================================
+attendance.artsci.ng {
+    # --------------------------------------------------------------------------
+    # TLS Certificate Strategy (Choose Option A or Option B)
+    # --------------------------------------------------------------------------
+    # Option A: Automatic Let's Encrypt DNS-01 (Requires Caddy built with DNS plugin)
+    # Build: xcaddy build --with github.com/caddy-dns/cloudflare
+    # Download: https://caddyserver.com/download?package=github.com%2Fcaddy-dns%2Fcloudflare
+    # Set CLOUDFLARE_API_TOKEN in Windows System Environment Variables.
+    tls {
+        dns cloudflare {$CLOUDFLARE_API_TOKEN}
+    }
+
+    # Option B: Pre-generated certificate (via win-acme / Certbot)
+    # Uncomment lines below if using win-acme to obtain certificates:
+    # tls C:/artsci-attendance/certs/attendance.artsci.ng.crt C:/artsci-attendance/certs/attendance.artsci.ng.key
+
+    # --------------------------------------------------------------------------
+    # Application Root & Compression
+    # --------------------------------------------------------------------------
+    root * C:/artsci-attendance/public
+    encode gzip zstd
+
+    # --------------------------------------------------------------------------
+    # PHP FastCGI Reverse Proxy
+    # --------------------------------------------------------------------------
+    # Connects to php-cgi.exe running locally on port 9000
+    php_fastcgi 127.0.0.1:9000 {
+        try_files {path} {path}/ /index.php?{query}
+        index index.php
+    }
+
+    # Serve static assets (PWA manifest, service worker, icons, CSS, JS)
+    file_server
+
+    # --------------------------------------------------------------------------
+    # Security: Block sensitive files and storage paths
+    # --------------------------------------------------------------------------
+    @blocked {
+        path /.*
+        path /storage/logs/*
+        path /storage/framework/*
+    }
+    respond @blocked 403
+
+    # --------------------------------------------------------------------------
+    # Security Headers for Secure Context & PWA
+    # --------------------------------------------------------------------------
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # --------------------------------------------------------------------------
+    # Access Logging with Automated Log Rotation
+    # --------------------------------------------------------------------------
+    log {
+        output file C:/artsci-attendance/storage/logs/caddy-access.log {
+            roll_size 20mb
+            roll_keep 10
+        }
+    }
+}

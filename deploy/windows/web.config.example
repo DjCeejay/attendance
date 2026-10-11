@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ARTSCI Attendance - IIS Configuration
+    Place this file in the Laravel public/ directory (as web.config) when using IIS on Windows 10/11 Pro
+-->
+<configuration>
+    <system.webServer>
+        <defaultDocument>
+            <files>
+                <clear />
+                <add value="index.php" />
+            </files>
+        </defaultDocument>
+
+        <rewrite>
+            <rules>
+                <rule name="Imported Rule 1" stopProcessing="true">
+                    <match url="^" ignoreCase="false" />
+                    <conditions logicalGrouping="MatchAll">
+                        <add input="{HTTP_AUTHORIZATION}" ignoreCase="false" />
+                        <add input="{REQUEST_FILENAME}" matchType="IsDirectory" negate="true" />
+                        <add input="{URL}" pattern="(.+)/$" ignoreCase="false" />
+                    </conditions>
+                    <action type="Redirect" redirectType="Permanent" url="{C:1}" />
+                </rule>
+                <rule name="Imported Rule 2" stopProcessing="true">
+                    <match url="^" ignoreCase="false" />
+                    <conditions logicalGrouping="MatchAll">
+                        <add input="{REQUEST_FILENAME}" matchType="IsDirectory" negate="true" />
+                        <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" />
+                    </conditions>
+                    <action type="Rewrite" url="index.php" />
+                </rule>
+            </rules>
+        </rewrite>
+
+        <httpProtocol>
+            <customHeaders>
+                <add name="X-Content-Type-Options" value="nosniff" />
+                <add name="X-Frame-Options" value="SAMEORIGIN" />
+                <add name="Referrer-Policy" value="strict-origin-when-cross-origin" />
+            </customHeaders>
+        </httpProtocol>
+
+        <security>
+            <requestFiltering>
+                <hiddenSegments>
+                    <add segment=".env" />
+                    <add segment="storage" />
+                </hiddenSegments>
+            </requestFiltering>
+        </security>
+    </system.webServer>
+</configuration>

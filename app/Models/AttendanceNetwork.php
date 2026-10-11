@@ -198,7 +198,34 @@ class AttendanceNetwork extends Model
     }
 
     /**
-     * Check if a given IP address matches this network's IP range/CIDR/DDNS.
+     * Check if a given IP address belongs to the configured authorized office LAN subnets.
+     */
+    public static function isOfficeLanIp(string $ip): bool
+    {
+        $ip = trim($ip);
+
+        if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+            return false;
+        }
+
+        // Allow loopback if explicitly configured (for local testing/admin simulation)
+        if (config('attendance.allow_loopback', false) && in_array($ip, ['127.0.0.1', '::1'], true)) {
+            return true;
+        }
+
+        $lanSubnets = (array) config('attendance.office_lan_subnets', []);
+
+        foreach ($lanSubnets as $subnet) {
+            if (!empty($subnet) && self::ipMatchesCidr($ip, $subnet)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if a given IP address matches this network's IP range/CIDR/DDNS or local office LAN.
      */
     public function matchesIp(string $ip): bool
     {
@@ -206,7 +233,14 @@ class AttendanceNetwork extends Model
             return false;
         }
 
-        // 1. Check static IP ranges / CIDRs
+        $mode = config('attendance.verification_mode', 'hybrid');
+
+        // 1. If in hybrid or local_lan mode, check if the client IP matches authorized office LAN subnets
+        if ($mode !== 'public_ip' && self::isOfficeLanIp($ip)) {
+            return true;
+        }
+
+        // 2. Check static IP ranges / CIDRs (works for both public and private IP CIDRs)
         if (!empty($this->ip_range)) {
             $ranges = array_map('trim', explode(',', $this->ip_range));
 
@@ -232,8 +266,8 @@ class AttendanceNetwork extends Model
             }
         }
 
-        // 2. Check DDNS resolution if DDNS is enabled
-        if ($this->ddns_enabled) {
+        // 3. Check DDNS resolution if DDNS is enabled (skipped in strict local_lan mode)
+        if ($mode !== 'local_lan' && $this->ddns_enabled) {
             $ddnsIp = $this->resolveDdns();
             if ($ddnsIp && self::ipMatchesCidr($ip, $ddnsIp)) {
                 return true;

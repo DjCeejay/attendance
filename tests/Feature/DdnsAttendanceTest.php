@@ -290,4 +290,130 @@ class DdnsAttendanceTest extends TestCase
         $this->assertNotContains('*', $trustedProxies, 'Wildcard trusted proxies are not allowed for attendance security.');
         $this->assertNotEmpty($trustedProxies);
     }
+
+    /** 12. Local LAN verification mode accepts authorized office LAN subnets */
+    public function test_local_lan_verification_mode_accepts_office_subnets(): void
+    {
+        config(['attendance.verification_mode' => 'local_lan']);
+        config(['attendance.office_lan_subnets' => ['192.168.0.0/24', '192.168.8.0/24']]);
+
+        $net = AttendanceNetwork::create([
+            'name' => 'Office Wi-Fi Local',
+            'ip_range' => '',
+            'enabled' => true,
+        ]);
+
+        // Phone on Wi-Fi A (Tenda 192.168.0.x)
+        $this->assertTrue($net->matchesIp('192.168.0.55'));
+
+        // Phone on Wi-Fi B (Airtel 192.168.8.x)
+        $this->assertTrue($net->matchesIp('192.168.8.102'));
+    }
+
+    /** 13. Local LAN verification mode rejects foreign / external IPs */
+    public function test_local_lan_verification_mode_rejects_foreign_ips(): void
+    {
+        config(['attendance.verification_mode' => 'local_lan']);
+        config(['attendance.office_lan_subnets' => ['192.168.0.0/24', '192.168.8.0/24']]);
+
+        $net = AttendanceNetwork::create([
+            'name' => 'Office Wi-Fi Local',
+            'ip_range' => '',
+            'enabled' => true,
+        ]);
+
+        // External / public / foreign IP
+        $this->assertFalse($net->matchesIp('102.89.23.44'));
+        $this->assertFalse($net->matchesIp('10.0.0.1'));
+    }
+
+    /** 14. Hybrid verification mode accepts both LAN subnet connections and valid DDNS */
+    public function test_hybrid_mode_accepts_both_lan_and_ddns(): void
+    {
+        config(['attendance.verification_mode' => 'hybrid']);
+        config(['attendance.office_lan_subnets' => ['192.168.0.0/24']]);
+
+        $net = AttendanceNetwork::create([
+            'name' => 'Office Wi-Fi Hybrid',
+            'ip_range' => '',
+            'ddns_hostname' => 'hybrid-office.example.net',
+            'ddns_enabled' => true,
+            'enabled' => true,
+        ]);
+
+        Cache::put("ddns_resolution_network_{$net->id}", '203.0.113.88', 180);
+
+        // 1. Matches via LAN subnet
+        $this->assertTrue($net->matchesIp('192.168.0.120'));
+
+        // 2. Matches via DDNS public IP
+        $this->assertTrue($net->matchesIp('203.0.113.88'));
+
+        // 3. Unrelated IP rejected
+        $this->assertFalse($net->matchesIp('198.51.100.77'));
+    }
+
+    /** 15. db:verify-integrity command executes successfully */
+    public function test_db_verify_integrity_command_reports_healthy_database(): void
+    {
+        $this->artisan('db:verify-integrity')
+            ->expectsOutputToContain('Integrity Check PASSED')
+            ->assertExitCode(0);
+
+        $this->artisan('db:verify-integrity', ['--json' => true])
+            ->assertExitCode(0);
+    }
+
+    /** 16. attendance:auto-checkout command processes unclosed records */
+    public function test_auto_checkout_command_processes_unclosed_records(): void
+    {
+        $staff = $this->createStaff();
+
+        \App\Models\AttendanceRecord::create([
+            'user_id' => $staff->id,
+            'attendance_date' => now()->toDateString(),
+            'check_in_at' => now()->subHours(8),
+            'check_out_at' => null,
+            'status' => 'present',
+        ]);
+
+        $this->artisan('attendance:auto-checkout', ['--force' => true])
+            ->expectsOutputToContain('Completed auto check-out')
+            ->assertExitCode(0);
+
+        $record = \App\Models\AttendanceRecord::where('user_id', $staff->id)->first();
+        $this->assertNotNull($record->check_out_at);
+        $this->assertStringContainsString('Forgotten Check-Out', $record->notes);
+    }
+
+    /** 17. Spoofed X-Forwarded-For from an untrusted client connection is rejected */
+    public function test_spoofed_forwarded_for_from_untrusted_client_is_rejected(): void
+    {
+        config(['attendance.verification_mode' => 'local_lan']);
+        config(['attendance.office_lan_subnets' => ['192.168.0.0/24']]);
+
+        $staff = $this->createStaff();
+        $cred = $this->registerCredential($staff);
+
+        AttendanceNetwork::create([
+            'name' => 'Office Wi-Fi Local',
+            'ip_range' => '',
+            'enabled' => true,
+        ]);
+
+        // Attacker on external IP 203.0.113.195 connects directly, but forges X-Forwarded-For: 192.168.0.50
+        $response = $this->actingAs($staff)
+            ->withServerVariables([
+                'REMOTE_ADDR' => '203.0.113.195',
+                'HTTP_X_FORWARDED_FOR' => '192.168.0.50',
+            ])
+            ->postJson(route('attendance.check-in'), [
+                'credential_id' => $cred->credential_id,
+                'client_data_json' => base64_encode(json_encode(['type' => 'webauthn.get', 'challenge' => 'dummy'])),
+            ]);
+
+        // Must reject with 403 Forbidden because REMOTE_ADDR is untrusted!
+        $response->assertStatus(403);
+        $this->assertStringContainsString('approved office network', $response->json('message'));
+    }
 }
