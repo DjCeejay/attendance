@@ -98,7 +98,7 @@ On cutover day (e.g. after office closing at 18:00):
 1. Take a final `pg_dump` from Railway.
 2. Restore to Windows PostgreSQL.
 3. Run `php artisan db:verify-integrity` on Windows.
-4. Update the office DNS record `attendance.artsci.ng` to point to the office server IP (`192.168.0.100`).
+4. Update the office DNS record `staff-portal.artsci.com.ng` to point to the office server IP (`192.168.0.100`).
 5. Staff phones connecting the next morning seamlessly check in to the local office server.
 
 ---
@@ -108,7 +108,7 @@ On cutover day (e.g. after office closing at 18:00):
 If any unexpected blocker occurs on the Windows server:
 1. **Immediate Rollback**:
    - The Railway deployment has never been altered and remains running.
-   - Simply revert the DNS record for `attendance.artsci.ng` (or have staff open the Railway URL).
+   - Simply revert the DNS record for `staff-portal.artsci.com.ng` to point back to Railway.
 2. **Data Reconciliation**:
    - If any test check-ins occurred on Windows, export them with `pg_dump` and reconcile if needed.
    - Staff immediately resume attendance on Railway with zero downtime.

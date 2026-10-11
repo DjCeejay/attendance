@@ -9,9 +9,9 @@
 }
 
 # ==============================================================================
-# Office Domain Configuration (Replace attendance.artsci.ng with your domain)
+# Office Domain Configuration: staff-portal.artsci.com.ng
 # ==============================================================================
-attendance.artsci.ng {
+staff-portal.artsci.com.ng {
     # --------------------------------------------------------------------------
     # TLS Certificate Strategy (Choose Option A or Option B)
     # --------------------------------------------------------------------------
@@ -23,9 +23,9 @@ attendance.artsci.ng {
         dns cloudflare {$CLOUDFLARE_API_TOKEN}
     }
 
-    # Option B: Pre-generated certificate (via win-acme / Certbot)
+    # Option B: Pre-generated certificate (via win-acme / Cloudflare Origin Cert)
     # Uncomment lines below if using win-acme to obtain certificates:
-    # tls C:/artsci-attendance/certs/attendance.artsci.ng.crt C:/artsci-attendance/certs/attendance.artsci.ng.key
+    # tls C:/artsci-attendance/certs/staff-portal.artsci.com.ng.crt C:/artsci-attendance/certs/staff-portal.artsci.com.ng.key
 
     # --------------------------------------------------------------------------
     # Application Root & Compression

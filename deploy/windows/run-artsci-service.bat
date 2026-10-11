@@ -19,5 +19,5 @@ start "ARTSCI-Caddy" caddy.exe run --config C:\artsci-attendance\deploy\windows\
 
 echo.
 echo Services launched!
-echo Access the application locally at: https://attendance.artsci.ng
+echo Access the application locally at: https://staff-portal.artsci.com.ng
 pause

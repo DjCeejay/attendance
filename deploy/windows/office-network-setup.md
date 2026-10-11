@@ -66,27 +66,27 @@ Modern smartphone browsers (iOS Safari, Android Chrome) enforce the Web Security
 
 ### The Split-Horizon DNS Solution
 1. **Public DNS Record**:
-   - In your domain DNS manager (e.g., Cloudflare, Route53, Namecheap), add a public DNS `A` record:
-     - **Host**: `attendance.artsci.ng`
-     - **IP**: `192.168.0.100` (Yes! RFC 1918 private IPs are valid in public DNS A records).
+   - In your domain DNS manager (e.g., Cloudflare, Route53, Namecheap), manage the record:
+     - **Host**: `staff-portal.artsci.com.ng`
+     - **IP**: Once migrated, points to the office server IP (or managed locally via router DNS).
 2. **Publicly-Trusted SSL Certificate**:
-   - Caddy on Windows automatically obtains and renews a valid Let's Encrypt SSL certificate for `attendance.artsci.ng` using the **DNS-01 ACME challenge** (via Cloudflare/DNS API).
+   - Caddy on Windows automatically obtains and renews a valid Let's Encrypt SSL certificate for `staff-portal.artsci.com.ng` using the **DNS-01 ACME challenge** (via Cloudflare/DNS API).
    - This requires **zero inbound port forwarding**!
 3. **Staff Phone Experience**:
-   - When staff connect to Office Wi-Fi and open `https://attendance.artsci.ng`:
-   - DNS resolves to `192.168.0.100`.
+   - When staff connect to Office Wi-Fi and open `https://staff-portal.artsci.com.ng`:
+   - DNS resolves to `<office-server-lan-ip>` (e.g. `192.168.0.100`).
    - The phone connects directly to the office Windows server over the local Wi-Fi.
    - The browser verifies the valid Let's Encrypt certificate with zero warnings.
    - The PWA installs cleanly, service worker caches assets, and WebAuthn passkeys work natively.
 
 ---
 
-## 5. WebAuthn Passkey Origin Note (Crucial for Staff)
+## 5. WebAuthn Passkey Origin Note (Major Benefit of Keeping the Domain)
 
 WebAuthn passkeys are cryptographically bound to the domain (`relyingPartyId`).
-- If staff previously registered a passkey on Railway (`attendance-production-e3bc.up.railway.app`), their phone will treat `attendance.artsci.ng` as a new origin.
-- When staff first access `https://attendance.artsci.ng`, they will be prompted to register their passkey on the new domain.
-- The Admin can approve the newly submitted device passkey with a single click in **Admin Console &rarr; Approved Credentials**.
+- Because the origin remains **`https://staff-portal.artsci.com.ng`**, the domain matches what staff phones already know!
+- Staff **do not lose their registered passkeys**! Their existing biometric device passkeys and PWA installation continue working without requiring staff to re-enroll or reinstall.
+- If any staff member changes devices, the admin can approve the new device via **Admin Console &rarr; Approved Credentials**.
 
 ---
 
@@ -94,7 +94,7 @@ WebAuthn passkeys are cryptographically bound to the domain (`relyingPartyId`).
 
 From a staff phone:
 1. Connect to **Office Wi-Fi A**.
-2. Open browser and visit: `https://attendance.artsci.ng` (or `https://192.168.0.100` for test ping).
+2. Open browser and visit: `https://staff-portal.artsci.com.ng`.
 3. Verify that the login page loads instantly.
 4. Log in and verify that the Network Verification indicator shows **Office Network Verified**.
 5. Disconnect from Wi-Fi A and connect to **Office Wi-Fi B**.
