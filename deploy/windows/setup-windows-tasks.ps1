@@ -84,7 +84,7 @@ Register-ScheduledTask `
     -Settings $standardSettings `
     -Description "Executes Laravel artisan schedule:run every minute for attendance checkout and scheduler jobs." | Out-Null
 
-Write-Host "  ✓ Task [$schedulerTaskName] registered." -ForegroundColor Green
+Write-Host "  [OK] Task [$schedulerTaskName] registered." -ForegroundColor Green
 
 # ------------------------------------------------------------------------------
 # 2. Register Task: ARTSCI-Office-IP-Updater (Runs every 5 minutes + on Network Change)
@@ -125,7 +125,7 @@ try {
     if ($netLog -and -not $netLog.IsEnabled) {
         $netLog.IsEnabled = $true
         $netLog.SaveChanges()
-        Write-Host "  ✓ Enabled Microsoft-Windows-NetworkProfile/Operational event log channel." -ForegroundColor Green
+        Write-Host "  [OK] Enabled Microsoft-Windows-NetworkProfile/Operational event log channel." -ForegroundColor Green
     }
 } catch {
     # Non-fatal if restricted or already enabled
@@ -146,9 +146,9 @@ try {
     $comTrigger.Delay = "PT3S" # 3-second delay to let DHCP and IP stack settle
     $rootFolder.RegisterTaskDefinition($ipUpdaterTaskName, $comDefinition, 6, "SYSTEM", $null, 5) | Out-Null
     $eventTriggerAttached = $true
-    Write-Host "  ✓ Attached network-change event trigger (EventID 10000, 10001, 10002) via COM." -ForegroundColor Green
+    Write-Host "  [OK] Attached network-change event trigger (EventID 10000, 10001, 10002) via COM." -ForegroundColor Green
 } catch {
-    Write-Host "  [NOTICE] COM trigger registration returned: $_. Trying XML registration fallback..." -ForegroundColor Yellow
+    Write-Host "  [NOTICE] COM trigger registration returned: $($_.Exception.Message). Trying XML registration fallback..." -ForegroundColor Yellow
 }
 
 if (-not $eventTriggerAttached) {
@@ -180,16 +180,16 @@ if (-not $eventTriggerAttached) {
 
                 Register-ScheduledTask -TaskName $ipUpdaterTaskName -Xml $taskXml.OuterXml -Force | Out-Null
                 $eventTriggerAttached = $true
-                Write-Host "  ✓ Attached network-change event trigger via XML definition." -ForegroundColor Green
+                Write-Host "  [OK] Attached network-change event trigger via XML definition." -ForegroundColor Green
             }
         }
     } catch {
-        Write-Host "  [WARNING] Could not attach network event trigger via XML: $_." -ForegroundColor Yellow
+        Write-Host "  [WARNING] Could not attach network event trigger via XML: $($_.Exception.Message)." -ForegroundColor Yellow
         Write-Host "  (The 5-minute periodic schedule trigger remains active)." -ForegroundColor Yellow
     }
 }
 
-Write-Host "  ✓ Task [$ipUpdaterTaskName] registered (5-min schedule + network-change event trigger)." -ForegroundColor Green
+Write-Host "  [OK] Task [$ipUpdaterTaskName] registered (5-min schedule + network-change event trigger)." -ForegroundColor Green
 
 # ------------------------------------------------------------------------------
 # 3. Register Task: ARTSCI-GitHub-AutoDeploy (Runs every 3 minutes)
@@ -215,7 +215,7 @@ Register-ScheduledTask `
     -Settings $standardSettings `
     -Description "Periodically checks GitHub main branch and deploys new commits automatically." | Out-Null
 
-Write-Host "  ✓ Task [$autoDeployTaskName] registered." -ForegroundColor Green
+Write-Host "  [OK] Task [$autoDeployTaskName] registered." -ForegroundColor Green
 
 # ------------------------------------------------------------------------------
 # 4. Register Task: ARTSCI-Database-Backup (Runs Daily at 02:00 AM)
@@ -247,7 +247,7 @@ Register-ScheduledTask `
     -Settings $backupSettings `
     -Description "Executes daily PostgreSQL database backup and retention policy." | Out-Null
 
-Write-Host "  ✓ Task [$backupTaskName] registered." -ForegroundColor Green
+Write-Host "  [OK] Task [$backupTaskName] registered." -ForegroundColor Green
 
 Write-Host ""
 Write-Host "==========================================================" -ForegroundColor Cyan
