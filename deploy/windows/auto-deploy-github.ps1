@@ -77,18 +77,18 @@ try {
     $gitCmd = Get-Command git -ErrorAction SilentlyContinue
     if (-not $gitCmd) {
         Write-DeployLog "Git is not installed or not found in system PATH. Cannot deploy." "ERROR"
-        exit 1
+        throw "Git not found"
     }
 
     if (-not (Test-Path ".git")) {
         Write-DeployLog "'$AppRoot' is not a Git repository. Cannot deploy." "ERROR"
-        exit 1
+        throw "Not a git repository"
     }
 
     # Verify .env exists and is protected
     if (-not (Test-Path ".env")) {
         Write-DeployLog "CRITICAL: .env file missing in '$AppRoot'! Aborting deployment to protect server." "ERROR"
-        exit 1
+        throw ".env missing"
     }
 
     # 5. Fetch Remote Branch
@@ -119,11 +119,21 @@ try {
     $rollbackCommit = $localCommit
 
     # 7. Database Safety Backup Before Applying Changes
+    # A failed or missing backup aborts deployment immediately — never proceed without a valid snapshot.
     $backupScript = Join-Path $AppRoot "deploy\windows\backup-database.ps1"
-    if (Test-Path $backupScript) {
-        Write-DeployLog "Taking pre-deployment database safety backup..."
-        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $backupScript -AppRoot $AppRoot | Out-Null
+    if (-not (Test-Path $backupScript)) {
+        Write-DeployLog "CRITICAL: Pre-deployment backup script not found at '$backupScript'! Deployment aborted immediately to protect data integrity." "ERROR"
+        throw "Pre-deployment backup script missing at '$backupScript'"
     }
+
+    Write-DeployLog "Taking pre-deployment database safety backup..."
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $backupScript -AppRoot $AppRoot
+    $backupExitCode = $LASTEXITCODE
+    if ($backupExitCode -ne 0) {
+        Write-DeployLog "Pre-deployment backup FAILED (exit code $backupExitCode). Deployment aborted to protect data integrity." "ERROR"
+        throw "Backup failed with exit code $backupExitCode"
+    }
+    Write-DeployLog "Pre-deployment backup completed successfully."
 
     # 8. Check If Composer Dependencies Changed
     $composerChanged = & git diff --name-only $localCommit $remoteCommit | Where-Object { $_ -eq "composer.json" -or $_ -eq "composer.lock" }
@@ -135,7 +145,7 @@ try {
     if ($LASTEXITCODE -ne 0) {
         Write-DeployLog "Fast-forward merge failed ($LASTEXITCODE): $($pullOutput -join ' ')" "ERROR"
         Write-DeployLog "Local changes detected that prevent clean fast-forward. Aborting deployment." "ERROR"
-        exit 1
+        throw "Fast-forward merge failed"
     }
 
     # 10. Update Composer Dependencies (If changed)
@@ -153,14 +163,47 @@ try {
         }
     }
 
+    # Helper function for safe repository rollback
+    function Invoke-GitRollback {
+        param ([string]$TargetCommit, [string]$Reason)
+        Write-DeployLog "Initiating rollback to commit $TargetCommit (Reason: $Reason)..." "WARNING"
+
+        # 1. Ensure working directory is on $Branch
+        $checkoutOut = & git checkout $Branch --force 2>&1
+        $checkoutExit = $LASTEXITCODE
+        if ($checkoutExit -ne 0) {
+            Write-DeployLog "git checkout $Branch returned exit code $checkoutExit : $($checkoutOut -join ' ')" "ERROR"
+        }
+
+        # 2. Hard reset branch pointer to the pre-deployment commit
+        $resetOut = & git reset --hard $TargetCommit 2>&1
+        $resetExit = $LASTEXITCODE
+        if ($resetExit -ne 0) {
+            Write-DeployLog "git reset --hard $TargetCommit returned exit code $resetExit : $($resetOut -join ' ')" "ERROR"
+        } else {
+            Write-DeployLog "Git working tree and branch '$Branch' successfully reset to commit $TargetCommit." "INFO"
+        }
+
+        # 3. Refresh Laravel caches for restored code
+        & $PhpExe artisan config:cache 2>&1 | Out-Null
+        & $PhpExe artisan route:cache 2>&1 | Out-Null
+        & $PhpExe artisan view:cache 2>&1 | Out-Null
+
+        Write-DeployLog "Rollback of repository code files completed. Branch '$Branch' remains active and usable for future deployments." "WARNING"
+        Write-DeployLog "CRITICAL: Git rollback restores code files only, NOT database schema changes." "WARNING"
+        Write-DeployLog "The production database was NOT automatically dropped or restored. Database schema restoration requires a deliberate, separately verified recovery procedure." "WARNING"
+        Write-DeployLog "If database tables or columns were altered, inspect the schema or restore the verified pre-deployment backup from C:\artsci-backups\daily using verify-backup-restore.ps1 or pg_restore." "WARNING"
+    }
+
     # 11. Run Safe Pending Migrations (NEVER migrate:fresh or reset)
     Write-DeployLog "Checking for pending database migrations..."
     $migOutput = & $PhpExe artisan migrate --force 2>&1
+    $migExitCode = $LASTEXITCODE
     Write-DeployLog "Migration output: $($migOutput -join ' ')"
 
-    if ($LASTEXITCODE -ne 0) {
-        Write-DeployLog "Database migration encountered an error ($LASTEXITCODE)!" "ERROR"
-        # We continue to health check to see if app is functional
+    if ($migExitCode -ne 0) {
+        Invoke-GitRollback -TargetCommit $rollbackCommit -Reason "Database migration failed (exit code $migExitCode)"
+        throw "Migration failed with exit code $migExitCode"
     }
 
     # 12. Refresh Laravel Production Caches
@@ -189,21 +232,14 @@ try {
         Write-DeployLog "✓ HEALTH CHECK PASSED! Application successfully running commit $remoteCommit." "INFO"
         Write-DeployLog "Deployment completed successfully." "INFO"
     } else {
-        Write-DeployLog "ALERT: Health check failed! Initiating rollback to $rollbackCommit..." "ERROR"
-
-        # Rollback Git
-        & git checkout $rollbackCommit --force | Out-Null
-        & $PhpExe artisan config:cache | Out-Null
-        & $PhpExe artisan route:cache | Out-Null
-        & $PhpExe artisan view:cache | Out-Null
-
-        Write-DeployLog "Rollback to commit $rollbackCommit completed. Application restored." "WARNING"
-        exit 1
+        Invoke-GitRollback -TargetCommit $rollbackCommit -Reason "Health check failed on $HealthCheckUrl"
+        throw "Health check failed; rollback completed"
     }
 
 } finally {
-    # Always remove the lockfile upon completion
+    # Always remove the lockfile upon completion or failure
     Remove-Item $lockFile -Force -ErrorAction SilentlyContinue
 }
 
 exit 0
+

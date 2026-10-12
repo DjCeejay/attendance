@@ -6,6 +6,7 @@
 param (
     [string]$AppRoot = "C:\ARTSCI\Attendance",
     [string]$BackupFilePath = "",
+    [string]$BackupDir = "C:\artsci-backups\daily",
     [string]$TestDatabaseName = "artsci_test_verification"
 )
 
@@ -16,9 +17,9 @@ Write-Host ""
 
 # 1. Locate newest backup if not specified
 if ([string]::IsNullOrEmpty($BackupFilePath)) {
-    $newestBackup = Get-ChildItem -Path "C:\artsci-backups\daily\artsci_db_backup_*.dump" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    $newestBackup = Get-ChildItem -Path "$BackupDir\artsci_db_backup_*.dump" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if (-not $newestBackup) {
-        Write-Host "[ERROR] No backup file found in C:\artsci-backups\daily\. Please specify -BackupFilePath." -ForegroundColor Red
+        Write-Host "[ERROR] No backup file found in $BackupDir. Please specify -BackupFilePath." -ForegroundColor Red
         exit 1
     }
     $BackupFilePath = $newestBackup.FullName
@@ -77,7 +78,12 @@ try {
 
     # 5. Restore backup into test database
     Write-Host "[2/4] Restoring backup archive into [$TestDatabaseName]..." -ForegroundColor Yellow
-    & $pgRestoreExe -h $dbHost -p $dbPort -U $dbUser -d $TestDatabaseName --no-owner --no-privileges "$BackupFilePath" 2>&1 | Out-Null
+    $restoreOutput = & $pgRestoreExe -h $dbHost -p $dbPort -U $dbUser -d $TestDatabaseName --no-owner --no-privileges "$BackupFilePath" 2>&1
+    $pgRestoreExitCode = $LASTEXITCODE
+    if ($pgRestoreExitCode -ne 0) {
+        Write-Host "[ERROR] pg_restore failed with exit code $pgRestoreExitCode : $($restoreOutput -join ' ')" -ForegroundColor Red
+        throw "pg_restore failed with exit code $pgRestoreExitCode"
+    }
 
     # 6. Query restored record counts
     Write-Host "[3/4] Validating restored data integrity..." -ForegroundColor Yellow
