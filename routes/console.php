@@ -10,3 +10,4 @@ Artisan::command('inspire', function () {
 
 // Scheduled tasks for Windows Task Scheduler or cron (php artisan schedule:run)
 Schedule::command('attendance:auto-checkout')->everyFifteenMinutes();
+Schedule::command('attendance:update-office-ip')->everyFiveMinutes();

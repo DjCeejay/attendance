@@ -4,7 +4,7 @@
 # ==============================================================================
 
 param (
-    [string]$AppRoot = "C:\artsci-attendance",
+    [string]$AppRoot = "C:\ARTSCI\Attendance",
     [string]$BackupFilePath = "",
     [string]$TestDatabaseName = "artsci_test_verification"
 )
@@ -34,7 +34,7 @@ Write-Host "Temporary database  : $TestDatabaseName" -ForegroundColor Yellow
 
 # 2. Parse DB Credentials from .env
 $dbHost = "127.0.0.1"
-$dbPort = "5432"
+$dbPort = "5433"
 $dbUser = "postgres"
 $dbPass = ""
 

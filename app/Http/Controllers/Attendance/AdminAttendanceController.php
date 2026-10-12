@@ -508,7 +508,38 @@ class AdminAttendanceController extends Controller
             }
         }
 
-        return view('admin.attendance.networks', compact('networks', 'currentIp'));
+        // Auto IP Updater Status
+        $autoIpCurrent = AttendanceSetting::get('office_ip_current');
+        $autoIpStatus = AttendanceSetting::get('office_ip_update_status', 'not_run');
+        $autoIpProvider = AttendanceSetting::get('office_ip_provider');
+        $autoIpCheckedAt = AttendanceSetting::get('office_ip_last_checked_at');
+        $autoIpChangedAt = AttendanceSetting::get('office_ip_last_changed_at');
+        $autoIpError = AttendanceSetting::get('office_ip_last_error');
+
+        return view('admin.attendance.networks', compact(
+            'networks',
+            'currentIp',
+            'autoIpCurrent',
+            'autoIpStatus',
+            'autoIpProvider',
+            'autoIpCheckedAt',
+            'autoIpChangedAt',
+            'autoIpError'
+        ));
+    }
+
+    public function autoUpdateOfficeIp(Request $request)
+    {
+        $this->authorizeAdmin();
+
+        try {
+            \Illuminate\Support\Facades\Artisan::call('attendance:update-office-ip', ['--force' => true]);
+            $output = trim(\Illuminate\Support\Facades\Artisan::output());
+
+            return back()->with('success', "Office public IP auto-update completed: {$output}");
+        } catch (\Throwable $e) {
+            return back()->with('error', "Failed to run public IP auto-updater: " . $e->getMessage());
+        }
     }
 
     public function syncCurrentIp(Request $request)

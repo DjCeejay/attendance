@@ -17,27 +17,76 @@
         </button>
     </div>
 
-    <!-- Dynamic IP Quick Sync Banner -->
-    <div class="bg-indigo-900 text-white p-4 rounded-2xl shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div class="space-y-1">
-            <div class="flex items-center gap-2">
-                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                <h3 class="font-extrabold text-xs text-indigo-100 uppercase tracking-wider">Your Current Public IP:</h3>
-                <span class="font-mono font-black text-sm text-white px-2 py-0.5 rounded bg-white/10">{{ $currentIp }}</span>
+    <!-- Automatic Public IP Updater & Current IP Status -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Server Background Auto-Updater Card -->
+        <div class="bg-slate-900 text-white p-4 rounded-2xl shadow-md flex flex-col justify-between border border-slate-800">
+            <div>
+                <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full {{ ($autoIpStatus === 'updated' || $autoIpStatus === 'unchanged') ? 'bg-emerald-400' : 'bg-amber-400' }} animate-pulse"></span>
+                        <h3 class="font-extrabold text-xs text-slate-300 uppercase tracking-wider">Office Server Public IP (Auto-Updater)</h3>
+                    </div>
+                    <span class="text-[10px] uppercase font-black px-2 py-0.5 rounded {{ $autoIpStatus === 'updated' ? 'bg-emerald-500/20 text-emerald-300' : ($autoIpStatus === 'unchanged' ? 'bg-indigo-500/20 text-indigo-300' : 'bg-slate-700 text-slate-300') }}">
+                        {{ $autoIpStatus === 'updated' ? 'Updated' : ($autoIpStatus === 'unchanged' ? 'Verified Active' : 'Scheduled (5m)') }}
+                    </span>
+                </div>
+                <div class="flex items-baseline gap-2 mb-1">
+                    <span class="font-mono font-black text-lg text-emerald-400">{{ $autoIpCurrent ?: 'Detecting...' }}</span>
+                    @if($autoIpProvider)
+                        <span class="text-[11px] text-slate-400">via {{ $autoIpProvider }}</span>
+                    @endif
+                </div>
+                <p class="text-[11px] text-slate-400">
+                    Runs every 5 minutes on the Windows server. Updates the approved office network automatically when the router's public IP changes.
+                    @if($autoIpCheckedAt)
+                        <span class="block mt-0.5 text-slate-500 text-[10px]">Last checked: {{ \Carbon\Carbon::parse($autoIpCheckedAt)->format('M j, Y g:i A') }} ({{ \Carbon\Carbon::parse($autoIpCheckedAt)->diffForHumans() }})</span>
+                    @endif
+                </p>
+                @if($autoIpError)
+                    <p class="text-[10px] text-rose-400 mt-1 font-mono">Notice: {{ $autoIpError }}</p>
+                @endif
             </div>
-            <p class="text-xs text-indigo-200">
-                Supports automatic Dynamic DNS (DDNS) hostnames for <strong>Office Wi-Fi A</strong> (Tenda TX2 Pro / ZTE 5G) and <strong>Office Wi-Fi B</strong> (Airtel Router). 
-                If DDNS is configured, your public IP is automatically resolved and validated on staff check-in.
-            </p>
+
+            <div class="mt-3 pt-3 border-t border-slate-800 flex items-center justify-between">
+                <span class="text-[10px] text-slate-500">Scheduler: <strong>Active (5-min cycle)</strong></span>
+                <form method="POST" action="{{ route('admin.attendance.networks.auto-update-ip') }}" class="inline">
+                    @csrf
+                    <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold text-[11px] py-1.5 px-3 rounded-lg shadow transition flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        <span>Check & Update Now</span>
+                    </button>
+                </form>
+            </div>
         </div>
 
-        <form method="POST" action="{{ route('admin.attendance.networks.sync-ip') }}" class="shrink-0" onsubmit="return confirm('Update Office Network to your current connected IP ({{ $currentIp }}/32)?');">
-            @csrf
-            <button type="submit" class="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-slate-950 font-black text-xs py-2 px-4 rounded-xl shadow transition flex items-center gap-1.5">
-                <svg class="w-4 h-4 text-slate-950" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                <span>Sync My Current IP</span>
-            </button>
-        </form>
+        <!-- Admin Connected Client IP Banner -->
+        <div class="bg-indigo-900 text-white p-4 rounded-2xl shadow-md flex flex-col justify-between border border-indigo-800">
+            <div>
+                <div class="flex items-center gap-2 mb-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-blue-400"></span>
+                    <h3 class="font-extrabold text-xs text-indigo-100 uppercase tracking-wider">Your Device's Public IP (Admin Client)</h3>
+                </div>
+                <div class="flex items-baseline gap-2 mb-1">
+                    <span class="font-mono font-black text-lg text-white">{{ $currentIp }}</span>
+                    <span class="text-[10px] text-indigo-300">Resolved via Cloudflare/Proxy</span>
+                </div>
+                <p class="text-[11px] text-indigo-200">
+                    This is the IP address Cloudflare sees for your current browser session. If you are currently in the office, this should match the office server's detected IP.
+                </p>
+            </div>
+
+            <div class="mt-3 pt-3 border-t border-indigo-800/60 flex items-center justify-between">
+                <span class="text-[10px] text-indigo-300">Quick Manual Sync</span>
+                <form method="POST" action="{{ route('admin.attendance.networks.sync-ip') }}" onsubmit="return confirm('Update Office Network to your current client IP ({{ $currentIp }}/32)?');">
+                    @csrf
+                    <button type="submit" class="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-slate-950 font-black text-[11px] py-1.5 px-3 rounded-lg shadow transition flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5 text-slate-950" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
+                        <span>Sync My IP ({{ $currentIp }})</span>
+                    </button>
+                </form>
+            </div>
+        </div>
     </div>
 
     <!-- Networks List -->

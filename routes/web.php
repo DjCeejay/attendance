@@ -70,6 +70,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/networks', [AdminAttendance::class, 'networks'])->name('networks');
         Route::post('/networks', [AdminAttendance::class, 'storeNetwork'])->name('networks.store');
         Route::post('/networks/sync-ip', [AdminAttendance::class, 'syncCurrentIp'])->name('networks.sync-ip');
+        Route::post('/networks/auto-update-ip', [AdminAttendance::class, 'autoUpdateOfficeIp'])->name('networks.auto-update-ip');
         Route::put('/networks/{network}', [AdminAttendance::class, 'updateNetwork'])->name('networks.update');
         Route::post('/networks/{network}/toggle', [AdminAttendance::class, 'toggleNetwork'])->name('networks.toggle');
         Route::post('/networks/{network}/refresh-ddns', [AdminAttendance::class, 'refreshDdns'])->name('networks.refresh-ddns');

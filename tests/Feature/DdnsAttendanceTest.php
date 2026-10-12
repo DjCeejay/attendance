@@ -416,4 +416,91 @@ class DdnsAttendanceTest extends TestCase
         $response->assertStatus(403);
         $this->assertStringContainsString('approved office network', $response->json('message'));
     }
+
+    /** 18. Cloudflare CF-Connecting-IP is honored when request is from trusted proxy */
+    public function test_cloudflare_connecting_ip_is_used_when_from_trusted_proxy(): void
+    {
+        $request = \Illuminate\Http\Request::create('/attendance', 'GET', [], [], [], [
+            'REMOTE_ADDR' => '127.0.0.1',
+            'HTTP_CF_CONNECTING_IP' => '102.89.45.12',
+            'HTTP_X_FORWARDED_FOR' => '102.89.45.12',
+        ]);
+
+        $resolvedIp = \App\Http\Controllers\Attendance\AttendanceController::resolveClientIp($request);
+        $this->assertEquals('102.89.45.12', $resolvedIp);
+    }
+
+    /** 19. Spoofed CF-Connecting-IP from untrusted direct connection is ignored */
+    public function test_spoofed_cf_connecting_ip_from_untrusted_direct_connection_is_ignored(): void
+    {
+        $request = \Illuminate\Http\Request::create('/attendance', 'GET', [], [], [], [
+            'REMOTE_ADDR' => '198.51.100.55',
+            'HTTP_CF_CONNECTING_IP' => '102.89.45.12',
+        ]);
+
+        $resolvedIp = \App\Http\Controllers\Attendance\AttendanceController::resolveClientIp($request);
+        $this->assertEquals('198.51.100.55', $resolvedIp);
+    }
+
+    /** 20. PublicIpService correctly validates public IPs and rejects private ranges */
+    public function test_public_ip_service_validates_public_ips_and_rejects_private(): void
+    {
+        $service = new \App\Services\PublicIpService();
+
+        // Valid public IPv4
+        $this->assertTrue($service->isValidPublicIp('102.89.45.12'));
+        $this->assertTrue($service->isValidPublicIp('8.8.8.8'));
+
+        // Private / Loopback / Invalid
+        $this->assertFalse($service->isValidPublicIp('127.0.0.1'));
+        $this->assertFalse($service->isValidPublicIp('192.168.0.50'));
+        $this->assertFalse($service->isValidPublicIp('10.0.0.1'));
+        $this->assertFalse($service->isValidPublicIp('172.16.0.1'));
+        $this->assertFalse($service->isValidPublicIp('invalid_ip'));
+    }
+
+    /** 21. attendance:update-office-ip command updates database and audit trail */
+    public function test_update_office_public_ip_command_updates_network_record(): void
+    {
+        $network = AttendanceNetwork::create([
+            'name' => 'HQ Main Office Wi-Fi',
+            'ip_range' => '198.51.100.1/32',
+            'enabled' => true,
+        ]);
+
+        // Mock PublicIpService to return specific IP
+        $mockService = $this->createMock(\App\Services\PublicIpService::class);
+        $mockService->method('detectPublicIpWithDetails')->willReturn([
+            'success' => true,
+            'ip' => '102.89.45.99',
+            'provider' => 'mock.service',
+            'latency_ms' => 45,
+            'error' => null,
+        ]);
+        $this->app->instance(\App\Services\PublicIpService::class, $mockService);
+
+        $this->artisan('attendance:update-office-ip')
+            ->expectsOutputToContain('Successfully updated Network')
+            ->assertExitCode(0);
+
+        $this->assertDatabaseHas('attendance_networks', [
+            'id' => $network->id,
+            'ip_range' => '102.89.45.99/32',
+            'last_resolved_ip' => '102.89.45.99',
+        ]);
+
+        $this->assertDatabaseHas('attendance_settings', [
+            'key' => 'office_ip_current',
+            'value' => '102.89.45.99',
+        ]);
+
+        $this->assertDatabaseHas('attendance_audit_logs', [
+            'event_type' => 'office_ip_auto_update',
+        ]);
+
+        // Run second time (unchanged IP)
+        $this->artisan('attendance:update-office-ip')
+            ->expectsOutputToContain('Approved office IP is unchanged')
+            ->assertExitCode(0);
+    }
 }

@@ -50,10 +50,19 @@ class AttendanceController extends Controller
     }
 
     /**
-     * Proxy-aware real client IP resolution using Laravel trusted-proxy middleware (Railway / Cloudflare).
+     * Proxy-aware real client IP resolution using Laravel trusted-proxy middleware (Railway / Cloudflare Tunnel).
      */
     public static function resolveClientIp(Request $request): string
     {
+        // When request is received through a trusted proxy (e.g. Cloudflare Tunnel / cloudflared on 127.0.0.1),
+        // prioritize CF-Connecting-IP header so Cloudflare edge proxies are never mistaken for the visitor.
+        if ($request->isFromTrustedProxy() && $cfIp = $request->header('CF-Connecting-IP')) {
+            $candidate = trim(explode(',', $cfIp)[0]);
+            if (filter_var($candidate, FILTER_VALIDATE_IP)) {
+                return $candidate;
+            }
+        }
+
         $ip = $request->ip();
         if (!empty($ip) && filter_var($ip, FILTER_VALIDATE_IP)) {
             return $ip;

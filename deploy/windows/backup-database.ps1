@@ -4,7 +4,7 @@
 # ==============================================================================
 
 param (
-    [string]$AppRoot = "C:\artsci-attendance",
+    [string]$AppRoot = "C:\ARTSCI\Attendance",
     [string]$PrimaryBackupDir = "C:\artsci-backups\daily",
     [string]$SecondaryBackupDir = "D:\artsci-backups\daily", # External USB or Secondary Drive
     [int]$RetentionDays = 30
@@ -33,8 +33,8 @@ if (-not (Test-Path $PrimaryBackupDir)) {
 
 # 2. Parse Database Connection Settings from .env
 $dbHost = "127.0.0.1"
-$dbPort = "5432"
-$dbName = "artsci_attendance"
+$dbPort = "5433"
+$dbName = "artsci_attendance_import"
 $dbUser = "postgres"
 $dbPass = ""
 

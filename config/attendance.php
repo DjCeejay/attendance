@@ -82,4 +82,16 @@ return [
         static fn (string $proxy): string => trim($proxy),
         preg_split('/[\s,]+/', (string) env('TRUSTED_PROXIES', '127.0.0.1,::1'))
     ), static fn (string $proxy): bool => $proxy !== '' && $proxy !== '*')),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Office Public IP Detection Settings
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for automated office public IP detection and updating.
+    |
+    */
+    'public_ip_service_url' => env('OFFICE_PUBLIC_IP_SERVICE_URL', null),
+    'public_ip_detection_timeout' => (int) env('OFFICE_PUBLIC_IP_TIMEOUT', 5),
+    'office_ip_network_id' => env('OFFICE_IP_NETWORK_ID', null),
 ];
