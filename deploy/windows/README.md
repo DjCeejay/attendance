@@ -20,9 +20,9 @@ This directory contains the deployment automation, security scripts, service def
 
 | File | Schedule | Purpose |
 | :--- | :--- | :--- |
-| [`update-office-ip.ps1`](file:///home/codecps/Desktop/attendance/deploy/windows/update-office-ip.ps1) | Every 5 minutes | **Automatic Office Public IP Updater**: Automatically queries public IP services (`api.ipify.org`, `icanhazip.com`, etc.) and updates the approved office network in PostgreSQL whenever the router's public IP changes. |
+| [`update-office-ip.ps1`](file:///home/codecps/Desktop/attendance/deploy/windows/update-office-ip.ps1) | Every 5 min + On Network Change | **Automatic Office Public IP Updater**: Automatically queries public IP services (`api.ipify.org`, `icanhazip.com`, etc.) and updates the approved office network in PostgreSQL whenever the router's public IP changes. Fires every 5 minutes and immediately when a network adapter connects, disconnects, or changes IP/gateway. Protected with mutex concurrency locking and debounce cooldown. |
 | [`auto-deploy-github.ps1`](file:///home/codecps/Desktop/attendance/deploy/windows/auto-deploy-github.ps1) | Every 3 minutes | **Automatic GitHub Deployment**: Periodically fetches `main` from GitHub, takes a safety DB backup, updates composer/migrations/caches, performs a post-deploy health check (`/up`), and auto-rolls back if an issue occurs. |
-| [`setup-windows-tasks.ps1`](file:///home/codecps/Desktop/attendance/deploy/windows/setup-windows-tasks.ps1) | One-time Setup | Registers all 4 scheduled tasks in Windows Task Scheduler under `SYSTEM`: Laravel Scheduler (1m), IP Updater (5m), GitHub Auto-Deploy (3m), DB Backup (daily 02:00). |
+| [`setup-windows-tasks.ps1`](file:///home/codecps/Desktop/attendance/deploy/windows/setup-windows-tasks.ps1) | One-time Setup | Registers all 4 scheduled tasks in Windows Task Scheduler under `SYSTEM`: Laravel Scheduler (1m), IP Updater (5m + Network Change Event), GitHub Auto-Deploy (3m), DB Backup (daily 02:00). Safely re-runnable. |
 | [`backup-database.ps1`](file:///home/codecps/Desktop/attendance/deploy/windows/backup-database.ps1) | Daily 02:00 AM | Automated PostgreSQL `pg_dump -F c` backup with 30-day retention pruning and off-disk replication to secondary storage (`D:\artsci-backups`). |
 | [`verify-backup-restore.ps1`](file:///home/codecps/Desktop/attendance/deploy/windows/verify-backup-restore.ps1) | Manual / Test | Restores backup into an isolated test database (`artsci_test_verification`) and verifies record counts without touching production data. |
 | [`install-prerequisites.ps1`](file:///home/codecps/Desktop/attendance/deploy/windows/install-prerequisites.ps1) | One-time Setup | Hardware audit (RAM, disk, CPU), network adapter check, and sleep/hibernate disabling via `powercfg`. |
@@ -34,18 +34,27 @@ This directory contains the deployment automation, security scripts, service def
 
 ## Task 1: How the Automatic Office Public IP Updater Works
 
-1. **Detection**: Every 5 minutes, `update-office-ip.ps1` runs `php artisan attendance:update-office-ip`.
-2. **Redundant Providers**: The `PublicIpService` queries a redundant pool of public IP resolvers (`api.ipify.org`, `icanhazip.com`, `checkip.amazonaws.com`, `ifconfig.me`, `ipinfo.io`) with strict validation rejecting private/loopback addresses.
-3. **Smart Database Update**:
+1. **Dual Trigger Execution**:
+   - **Periodic Schedule**: Runs every 5 minutes indefinitely.
+   - **Immediate Event Trigger**: Windows Task Scheduler monitors the `Microsoft-Windows-NetworkProfile/Operational` event log channel for Event IDs `10000` (Network connected), `10001` (Network disconnected), and `10002` (Network profile changed). Whenever an ethernet cable is plugged in, Wi-Fi connects, or the router restarts and reassigns an IP, the updater runs immediately after a 3-second link stabilization delay.
+2. **Concurrency & Debounce Protection**:
+   - Uses file mutex `storage\framework\update-office-ip.lock` with a 3-minute stale timeout to ensure overlapping executions never occur.
+   - Task Scheduler settings enforce `MultipleInstancesPolicy: IgnoreNew`.
+   - Debounce mechanism (`storage\framework\update-office-ip-lastsuccess.txt`) suppresses redundant executions if a successful check already occurred within the last 15 seconds, preventing external API rate-limiting during network flapping.
+3. **Redundant Providers & SSL Integrity**:
+   - The `PublicIpService` queries a redundant pool of public IP resolvers (`api.ipify.org`, `icanhazip.com`, `checkip.amazonaws.com`, `ifconfig.me`, `ipinfo.io`) with strict validation rejecting private/loopback addresses.
+   - Full SSL certificate verification is preserved throughout.
+4. **Smart Database Update**:
    - If the public IP matches the currently approved IP, it updates timestamps without creating audit noise.
    - If the router was assigned a new public IP (e.g. after a router restart or power outage), it automatically updates the designated `AttendanceNetwork` record (`<new_ip>/32`) and logs the change in `attendance_audit_logs`.
-4. **Cloudflare Tunnel Visitor Matching**:
+   - If offline (e.g. cable unplugged), it records failure in settings but **leaves the approved network untouched**, so staff on that network can resume checking in as soon as connectivity restores.
+5. **Cloudflare Tunnel Visitor Matching**:
    - Staff phones connect to `https://staff-portal.artsci.com.ng`.
    - Cloudflare identifies the connecting IP of staff on office Wi-Fi as the office's public IP.
    - Cloudflare forwards this in `CF-Connecting-IP`.
    - Laravel validates that the visitor IP matches the office public IP, approving check-in!
    - Staff at home or on mobile data have different public IPs and are blocked (403 Forbidden).
-5. **No Router Access Required**: Does not require router logins, port forwarding, or DDNS credentials.
+6. **No Router Access Required**: Does not require router logins, port forwarding, or DDNS credentials.
 
 ---
 
@@ -87,3 +96,32 @@ To configure GitHub authentication for automatic pulling:
 * **Option B (GitHub Personal Access Token)**:
   Generate a fine-grained or classic GitHub PAT with `Contents: Read-only`.
   Configure Git Credential Manager or set: `git remote set-url origin https://<TOKEN>@github.com/DjCeejay/attendance.git`
+
+---
+
+## Verifying the Network-Change Trigger on Windows
+
+After running `.\deploy\windows\setup-windows-tasks.ps1`:
+
+1. **Verify Task Triggers in Task Scheduler GUI**:
+   - Press `Win + R`, type `taskschd.msc`, and hit Enter.
+   - Click **Task Scheduler Library** and double-click `ARTSCI-Office-IP-Updater`.
+   - Under the **Triggers** tab, verify both triggers are present:
+     - `Daily / Repeat every 5 minutes`
+     - `On an event - Log: Microsoft-Windows-NetworkProfile/Operational, Event ID: 10000, 10001, 10002`
+   - Under the **Settings** tab, verify **If the task is already running**: `Do not start a new instance`.
+
+2. **Verify Registration via PowerShell**:
+   ```powershell
+   Get-ScheduledTask -TaskName "ARTSCI-Office-IP-Updater" | Select-Object TaskName, State
+   (Get-ScheduledTask -TaskName "ARTSCI-Office-IP-Updater").Triggers
+   ```
+
+3. **Live Network Change Verification**:
+   - Disconnect and reconnect the server's Ethernet cable or toggle Wi-Fi.
+   - Wait 5 seconds.
+   - Inspect the updater log:
+     ```powershell
+     Get-Content C:\ARTSCI\Attendance\storage\logs\office-ip-updater.log -Tail 20
+     ```
+   - Confirm that the updater executed automatically upon connection change without overlapping.

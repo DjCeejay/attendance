@@ -87,10 +87,10 @@ Register-ScheduledTask `
 Write-Host "  ✓ Task [$schedulerTaskName] registered." -ForegroundColor Green
 
 # ------------------------------------------------------------------------------
-# 2. Register Task: ARTSCI-Office-IP-Updater (Runs every 5 minutes)
+# 2. Register Task: ARTSCI-Office-IP-Updater (Runs every 5 minutes + on Network Change)
 # ------------------------------------------------------------------------------
 $ipUpdaterTaskName = "ARTSCI-Office-IP-Updater"
-Write-Host "[2/4] Registering $ipUpdaterTaskName (Runs every 5 minutes)..." -ForegroundColor Yellow
+Write-Host "[2/4] Registering $ipUpdaterTaskName (Runs every 5 minutes + on Network Change)..." -ForegroundColor Yellow
 
 Unregister-ScheduledTask -TaskName $ipUpdaterTaskName -Confirm:$false -ErrorAction SilentlyContinue
 
@@ -102,15 +102,94 @@ $ipUpdaterAction = New-ScheduledTaskAction `
 
 $ipUpdaterTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5)
 
+$ipUpdaterSettings = New-ScheduledTaskSettingsSet `
+    -AllowStartIfOnBatteries `
+    -DontStopIfGoingOnBatteries `
+    -StartWhenAvailable `
+    -MultipleInstances IgnoreNew `
+    -RestartCount 3 `
+    -RestartInterval (New-TimeSpan -Minutes 1) `
+    -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
+
 Register-ScheduledTask `
     -TaskName $ipUpdaterTaskName `
     -Action $ipUpdaterAction `
     -Trigger $ipUpdaterTrigger `
     -Principal $systemPrincipal `
-    -Settings $standardSettings `
-    -Description "Detects office public IP changes and automatically updates approved attendance network in database." | Out-Null
+    -Settings $ipUpdaterSettings `
+    -Description "Detects office public IP changes and automatically updates approved attendance network in database (every 5 min and on network connection change)." | Out-Null
 
-Write-Host "  ✓ Task [$ipUpdaterTaskName] registered." -ForegroundColor Green
+# Ensure Microsoft-Windows-NetworkProfile/Operational event log channel is enabled
+try {
+    $netLog = Get-WinEvent -ListLog "Microsoft-Windows-NetworkProfile/Operational" -ErrorAction SilentlyContinue
+    if ($netLog -and -not $netLog.IsEnabled) {
+        $netLog.IsEnabled = $true
+        $netLog.SaveChanges()
+        Write-Host "  ✓ Enabled Microsoft-Windows-NetworkProfile/Operational event log channel." -ForegroundColor Green
+    }
+} catch {
+    # Non-fatal if restricted or already enabled
+}
+
+# Attach Event Trigger for Network Changes (Microsoft-Windows-NetworkProfile/Operational 10000, 10001, 10002)
+$eventTriggerAttached = $false
+try {
+    # Method A: COM Schedule.Service (Native Task Scheduler 2.0 API)
+    $taskService = New-Object -ComObject("Schedule.Service")
+    $taskService.Connect()
+    $rootFolder = $taskService.GetFolder("\")
+    $comTask = $rootFolder.GetTask($ipUpdaterTaskName)
+    $comDefinition = $comTask.Definition
+    $comTrigger = $comDefinition.Triggers.Create(0) # 0 = TASK_TRIGGER_EVENT
+    $comTrigger.Subscription = '<QueryList><Query Id="0" Path="Microsoft-Windows-NetworkProfile/Operational"><Select Path="Microsoft-Windows-NetworkProfile/Operational">*[System[(EventID=10000 or EventID=10001 or EventID=10002)]]</Select></Query></QueryList>'
+    $comTrigger.Enabled = $true
+    $comTrigger.Delay = "PT3S" # 3-second delay to let DHCP and IP stack settle
+    $rootFolder.RegisterTaskDefinition($ipUpdaterTaskName, $comDefinition, 6, "SYSTEM", $null, 5) | Out-Null
+    $eventTriggerAttached = $true
+    Write-Host "  ✓ Attached network-change event trigger (EventID 10000, 10001, 10002) via COM." -ForegroundColor Green
+} catch {
+    Write-Host "  [NOTICE] COM trigger registration returned: $_. Trying XML registration fallback..." -ForegroundColor Yellow
+}
+
+if (-not $eventTriggerAttached) {
+    try {
+        # Method B: XML manipulation via Export-ScheduledTask
+        [xml]$taskXml = Export-ScheduledTask -TaskName $ipUpdaterTaskName
+        $ns = New-Object System.Xml.XmlNamespaceManager($taskXml.NameTable)
+        $ns.AddNamespace("t", "http://schemas.microsoft.com/windows/2004/02/mit/task")
+
+        $triggersNode = $taskXml.SelectSingleNode("//t:Triggers", $ns)
+        if ($triggersNode) {
+            $existingEvent = $triggersNode.SelectSingleNode("t:EventTrigger", $ns)
+            if (-not $existingEvent) {
+                $eventElem = $taskXml.CreateElement("EventTrigger", "http://schemas.microsoft.com/windows/2004/02/mit/task")
+
+                $enabledElem = $taskXml.CreateElement("Enabled", "http://schemas.microsoft.com/windows/2004/02/mit/task")
+                $enabledElem.InnerText = "true"
+                $eventElem.AppendChild($enabledElem) | Out-Null
+
+                $subElem = $taskXml.CreateElement("Subscription", "http://schemas.microsoft.com/windows/2004/02/mit/task")
+                $subElem.InnerText = '<QueryList><Query Id="0" Path="Microsoft-Windows-NetworkProfile/Operational"><Select Path="Microsoft-Windows-NetworkProfile/Operational">*[System[(EventID=10000 or EventID=10001 or EventID=10002)]]</Select></Query></QueryList>'
+                $eventElem.AppendChild($subElem) | Out-Null
+
+                $delayElem = $taskXml.CreateElement("Delay", "http://schemas.microsoft.com/windows/2004/02/mit/task")
+                $delayElem.InnerText = "PT3S"
+                $eventElem.AppendChild($delayElem) | Out-Null
+
+                $triggersNode.AppendChild($eventElem) | Out-Null
+
+                Register-ScheduledTask -TaskName $ipUpdaterTaskName -Xml $taskXml.OuterXml -Force | Out-Null
+                $eventTriggerAttached = $true
+                Write-Host "  ✓ Attached network-change event trigger via XML definition." -ForegroundColor Green
+            }
+        }
+    } catch {
+        Write-Host "  [WARNING] Could not attach network event trigger via XML: $_." -ForegroundColor Yellow
+        Write-Host "  (The 5-minute periodic schedule trigger remains active)." -ForegroundColor Yellow
+    }
+}
+
+Write-Host "  ✓ Task [$ipUpdaterTaskName] registered (5-min schedule + network-change event trigger)." -ForegroundColor Green
 
 # ------------------------------------------------------------------------------
 # 3. Register Task: ARTSCI-GitHub-AutoDeploy (Runs every 3 minutes)
