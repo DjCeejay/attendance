@@ -123,7 +123,7 @@ if (-not (Get-Command $pgDumpExe -ErrorAction SilentlyContinue) -and -not (Test-
 $backupFileName = "artsci_db_backup_$timestamp.dump"
 $backupFilePath = Join-Path $PrimaryBackupDir $backupFileName
 
-Write-BackupLog "Executing pg_dump for database [$dbName] on host [$dbHost:$dbPort]..."
+Write-BackupLog "Executing pg_dump for database [$dbName] on host [${dbHost}:${dbPort}]..."
 
 try {
     if (-not [string]::IsNullOrEmpty($dbPass)) {
